@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Platform layer: overridden in values-v28 / values-v29 with newer window attributes. -->
+    <style name="Platform.Theme.ZenMower" parent="android:Theme.Material.NoActionBar.Fullscreen" />
+
+    <style name="Base.Theme.ZenMower" parent="Platform.Theme.ZenMower">
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowBackground">@color/zen_background</item>
+        <item name="android:colorBackground">@color/zen_background</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+
+    <style name="Theme.ZenMower" parent="Base.Theme.ZenMower" />
+</resources>

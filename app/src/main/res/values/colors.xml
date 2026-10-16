@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark lawn green used behind the WebView, banner and splash (avoids a white flash). -->
+    <color name="zen_background">#FF0E2A1B</color>
+    <!-- Splash icon disc (Android 12+), matches the launcher icon's lawn. -->
+    <color name="zen_splash_icon_background">#FF3E9A3E</color>
+</resources>

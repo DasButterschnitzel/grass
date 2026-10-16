@@ -1,0 +1,35 @@
+# Gradle / build output
+.gradle/
+build/
+/app/build/
+/app/release/
+/app/debug/
+.kotlin/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Local configuration and secrets
+local.properties
+keystore.properties
+admob.properties
+*.jks
+*.keystore
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Logs / misc
+*.log
+__pycache__/
+*.hprof
+*.apk
+*.aab
+*.ap_
+
+# Prebuilt release artifacts are committed on purpose
+!dist/*.apk
+!dist/*.aab

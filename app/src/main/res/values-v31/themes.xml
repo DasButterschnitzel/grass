@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ system splash screen: same dark green as the WebView background. -->
+    <style name="Theme.ZenMower" parent="Base.Theme.ZenMower">
+        <item name="android:windowSplashScreenBackground">@color/zen_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/zen_splash_icon_background</item>
+    </style>
+</resources>

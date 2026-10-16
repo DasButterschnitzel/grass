@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Auto Backup rules for Android 11 and lower (see data_extraction_rules.xml for 12+). -->
+<full-backup-content>
+    <include domain="sharedpref" path="." />
+    <include domain="root" path="app_webview/" />
+    <exclude domain="root" path="app_webview/Default/GPUCache/" />
+</full-backup-content>

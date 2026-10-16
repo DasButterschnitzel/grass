@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Zen Mower</string>
+    <string name="share_title">Teilen</string>
+    <string name="webview_unavailable">Zen Mower benötigt Android System WebView. Tippe hier, um es zu installieren oder zu aktualisieren.</string>
+</resources>

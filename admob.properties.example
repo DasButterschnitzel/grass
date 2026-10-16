@@ -1,0 +1,11 @@
+# Copy to admob.properties (gitignored) to build with your real AdMob ids.
+# Missing keys fall back to Google's official test ids. Gradle properties (-PADMOB_APP_ID=...)
+# and environment variables with the same names take precedence over this file.
+ADMOB_APP_ID=ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY
+ADMOB_BANNER_ID=ca-app-pub-XXXXXXXXXXXXXXXX/ZZZZZZZZZZ
+ADMOB_INTERSTITIAL_ID=ca-app-pub-XXXXXXXXXXXXXXXX/ZZZZZZZZZZ
+ADMOB_REWARDED_ID=ca-app-pub-XXXXXXXXXXXXXXXX/ZZZZZZZZZZ
+# Optional: comma-separated hashed device ids that always receive test ads / UMP debug forms.
+#ADMOB_TEST_DEVICE_IDS=33BE2250B43518CCDA7DE426D04EE231
+# Optional, debug builds only: EEA | REGULATED_US_STATE | OTHER
+#UMP_DEBUG_GEOGRAPHY=EEA
