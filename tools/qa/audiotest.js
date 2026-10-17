@@ -26,7 +26,7 @@ const fs = require('fs');
     const iv = setInterval(() => {
       // 0-2s idle (ambience/music), then mow lanes, last 1.5s idle again
       if (t > 2 && t < secs - 1.5) {
-        if (!m._tt || t > m._tt) { const i = g.field.nearestUncut(m.x, m.y); if (i >= 0) { m.tx = (i % g.level.W) + 0.5; m.ty = ((i / g.level.W) | 0) + 0.5; m.hasTarget = true; } m._tt = t + 0.25; }
+        if (!m._tt || t > m._tt) { const i = g.field.nearestTall(m.x, m.y); if (i >= 0) { m.tx = (i % g.level.W) + 0.5; m.ty = ((i / g.level.W) | 0) + 0.5; m.hasTarget = true; } m._tt = t + 0.25; }
       } else m.hasTarget = false;
       ZM.debug.step(1, 1 / 60); t += 1 / 60;
     }, 1000 / 60);

@@ -6,9 +6,9 @@ Run with `PLAYWRIGHT=/path/to/node_modules/playwright node tools/qa/<script>.js 
 
 | Script | Purpose |
 | --- | --- |
-| `pace.js <url> <levels> <fingers>` | Bot plays N levels (greedy steering + greedy upgrades) and prints seconds per level – used to tune `economy.js`. |
-| `play.js <url> <out> [level] [dpr]` | Deterministic mowing screenshots (start, mid-mow, zoom, cleared). |
-| `gallery.js <url> <out> 8,21,33` | Screenshots of several levels/biomes. |
+| `pace.js <url> [lawns] [skill] [econ-json]` | Bot plays N lawns (autopilot steering, buys cheapest upgrade or saves for the next lawn) and prints seconds per lawn – used to tune `economy.js`. `econ-json` overrides the lawn price curve, e.g. `'{"a":1,"b":2,"c":4,"c0":6000}'`. |
+| `lawn.js <url> <out> [lawn] [locale]` | Regrowth, golden patch, "next lawn" dialog, lawn change and zen view screenshots. |
+| `gallery.js <url> <out> 2,6,9` | Screenshots of several lawns/biomes. |
 | `multitouch.js <url> <out>` | Two simultaneous CDP touch points → verifies each finger steers its own mower. |
 | `storeshots.js <url> <out>` | Regenerates the 1080×2160 Play Store screenshots. |
 | `audiotest.js <url> out.webm [secs] [level]` + `analyze.py in.wav spec.png` | Records the live audio mix while mowing and reports loudness / spectral balance. |

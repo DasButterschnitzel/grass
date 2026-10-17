@@ -99,9 +99,9 @@ window.ZM = window.ZM || {};
       suffix = String.fromCharCode(97 + Math.floor(k / 26) % 26) + String.fromCharCode(97 + (k % 26));
     }
     let v = n / Math.pow(1000, e);
-    if (v >= 999.95) { v /= 1000; e++; if (e < SUFFIX.length) suffix = SUFFIX[e]; }
+    if (v >= 999.5) { v /= 1000; e++; if (e < SUFFIX.length) suffix = SUFFIX[e]; }
     const s = v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v.toFixed(2);
-    return s.replace(/\.?0+$/, '') + suffix;
+    return (s.indexOf('.') >= 0 ? s.replace(/\.?0+$/, '') : s) + suffix;
   };
   ZM.fmtTime = function (sec) {
     sec = Math.max(0, Math.ceil(sec));

@@ -4,14 +4,15 @@
   const KEY = 'zenmower.save.v1';
   const $ = (id) => document.getElementById(id);
 
+  const SAVE_VERSION = 2;
   const defaults = () => ({
-    v: 1, cash: 0, gems: 0, level: 1,
-    upg: { blade: 0, sharp: 0, engine: 0, fert: 0, fleet: 0, bots: 0 },
+    v: SAVE_VERSION, cash: 0, gems: 0, level: 1,
+    upg: { blade: 0, engine: 0, fert: 0, sprinkler: 0, fleet: 0, bots: 0 },
     skin: 'classic', skins: ['classic'],
     settings: { sfx: 0.9, music: 0.55, amb: 0.7, haptics: true, control: 'follow', quality: 'auto' },
     stats: { totalEarned: 0, cells: 0, levels: 0, playTime: 0 },
     rate: 0, lastSeen: Date.now(), field: null, boostT: 0,
-    tutorial: { move: false, fleet: false },
+    tutorial: { move: false, fleet: false, lawn: false, regrow: false, zen: false },
     ads: { lastInter: 0, levelsSince: 0 },
     freeGemsAt: 0, created: Date.now(),
   });
@@ -31,7 +32,19 @@
   function loadSave() {
     try {
       const raw = localStorage.getItem(KEY);
-      if (raw) return merge(defaults(), JSON.parse(raw));
+      if (raw) {
+        const old = JSON.parse(raw);
+        if (!old.v || old.v < SAVE_VERSION) {
+          // v1 used a completely different economy (clear-the-field levels). Keep what the
+          // player bought with gems and their settings, restart the lawn progression.
+          const keep = { gems: old.gems, skins: old.skins, skin: old.skin, settings: old.settings, created: old.created,
+            tutorial: { move: !!(old.tutorial && old.tutorial.move), fleet: !!(old.tutorial && old.tutorial.fleet) } };
+          const s = merge(defaults(), keep);
+          s.field = null;
+          return s;
+        }
+        return merge(defaults(), old);
+      }
     } catch (e) { console.warn('save corrupt, starting fresh', e); }
     return defaults();
   }
@@ -85,6 +98,7 @@
       game.playRect = ui.playRect();
     };
     ZM.onQuality = () => { dpr = qualityCap(); layout(); };
+    ZM.onLayout = () => layout();
     dpr = qualityCap();
     layout();
     window.addEventListener('resize', layout);
@@ -118,6 +132,7 @@
     // ---------------------------------------------------------------- offline earnings
     const sessionStart = performance.now();
     const checkOffline = (awaySec) => {
+      if (awaySec > 20 && game.field) game.field.fillAll(); // the lawn kept growing
       if (awaySec < 120 || save.rate <= 0) return;
       const bots = save.upg.bots || 0;
       const factor = bots > 0 ? 0.08 + 0.025 * bots : 0.03;
@@ -134,7 +149,8 @@
       const now = Date.now();
       const session = (performance.now() - sessionStart) / 1000;
       const recentReward = now - ZM.lastRewardedAt < 90000;
-      if (save.level >= 5 && save.ads.levelsSince >= 3 && now - save.ads.lastInter > 150000 && session > 120 && !recentReward) {
+      // only ever between lawns (a natural break), never while mowing
+      if (save.level >= 3 && now - save.ads.lastInter > 180000 && session > 120 && !recentReward) {
         ZM.Native.showInterstitial(() => {});
         save.ads.lastInter = now;
         save.ads.levelsSince = 0;

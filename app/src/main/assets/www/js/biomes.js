@@ -134,7 +134,7 @@
   };
   const BASE = B.map(parse);
   ZM.BIOME_COUNT = BASE.length;
-  ZM.LEVELS_PER_BIOME = 5;
+  ZM.LEVELS_PER_BIOME = 1; // every lawn has its own look
 
   // Endless: after the first full cycle biomes return with a hue twist and a roman numeral.
   const ROMAN = ['', '', ' II', ' III', ' IV', ' V', ' VI', ' VII', ' VIII', ' IX', ' X'];

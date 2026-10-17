@@ -205,7 +205,7 @@ void main(){
   vec4 st = texture(u_state, (cell + 0.5) / u_grid);
   v_side = a_pos.x; v_t = a_pos.y;
   if (st.a < 0.5) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); v_col = vec3(0.0); return; }
-  float layers = floor(st.r*255.0/20.0 + 0.5);
+  float hgt = st.r*255.0/20.0; // current grass height in layers – grows back continuously
   float typ = floor(st.g*255.0/40.0 + 0.5);
   vec2 root = cell + a_inst.zw;
   float rnd = a_rnd.x, rnd2 = a_rnd.y;
@@ -213,15 +213,25 @@ void main(){
   float h; vec3 tip; vec3 base; float w = u_bladeW * (0.75 + 0.5*rnd2);
   float grow = clamp(u_grow*2.2 - (1.0 - root.y/u_grid.y)*1.0 - rnd*0.2, 0.0, 1.0);
   grow = grow*grow*(3.0-2.0*grow);
-  if (layers < 0.5) {
+  vec3 cutCol = mix(u_cutB, u_cutA, rnd2) * (0.98 + 0.08*rnd);
+  if (hgt < 0.1) {
     h = (0.12 + 0.14*rnd);
-    tip = mix(u_cutB, u_cutA, rnd2) * (0.98 + 0.08*rnd);
+    tip = cutCol;
     base = tip * 0.86;
     w *= 0.7;
   } else {
-    h = u_bladeH * (0.62 + 0.2*min(layers, 5.0) + 0.06*max(layers - 5.0, 0.0)) * (0.78 + 0.44*rnd) * (0.08 + 0.92*grow);
-    tip = pal(min(layers - 1.0, 6.0)) * (0.9 + 0.2*rnd2) * (1.0 - 0.05*max(layers - 7.0, 0.0));
-    base = mix(u_root, tip, 0.18);
+    float f = hgt < 1.0 ? 0.14 + 0.68*hgt : 0.82 + 0.2*(min(hgt, 5.0) - 1.0) + 0.06*max(hgt - 5.0, 0.0);
+    h = u_bladeH * f * (0.78 + 0.44*rnd) * (0.08 + 0.92*grow);
+    if (hgt < 1.0) {
+      tip = mix(cutCol, pal(0.0), smoothstep(0.1, 0.95, hgt));
+    } else {
+      float li = min(hgt - 1.0, 6.0);
+      float fl = floor(li);
+      tip = mix(pal(fl), pal(min(fl + 1.0, 6.0)), smoothstep(0.0, 1.0, li - fl));
+    }
+    tip *= 0.9 + 0.2*rnd2;
+    base = mix(u_root, tip, 0.18 + 0.5*(1.0 - min(hgt, 1.0)));
+    w *= 0.7 + 0.3*min(hgt, 1.0);
     if (typ > 0.5 && typ < 1.5) {
       float sh = 0.85 + 0.3*sin(u_time*3.5 + rnd*6.283 + root.x*0.4);
       tip = u_gold * sh;

@@ -5,7 +5,7 @@
 **App name** (max 30): `Zen Mower: ASMR Grass Cutting`
 
 **Short description** (max 80):
-`Relaxing ASMR lawn mowing. Satisfying cuts, calm music and endless gardens.`
+`Relaxing ASMR lawn mowing. Grass that grows back, calm music, endless lawns.`
 
 **Full description:**
 
@@ -19,23 +19,28 @@ Zen Mower is a calm, deeply satisfying grass-cutting game made for unwinding. Gl
 • Birds, crickets, ocean waves and wind – every garden has its own soundscape
 • Play with headphones for the full experience
 
+🌱 THE LAWN GROWS BACK
+• Mow, watch it grow back, mow again – an endless, meditative loop
+• Sprinkler: faster regrowth · Fertilizer: every blade pays more · Blade & Engine: bigger and faster
+• Golden patches pop up for big bonuses, hidden gems and lucky clovers trigger a cutting frenzy
+
 ✋ MULTI-TOUCH MOWING
 • Unlock up to 4 mowers and steer each one with its own finger
 • Or let Autopilot take the wheel and just watch the stripes appear
 
-🌸 ENDLESS GARDENS
-• Unlimited levels – hearts, stars, clovers, islands and more
+🌸 ENDLESS LAWNS
+• Save up and move to the next lawn – every lawn pays more, you keep all upgrades
+• Hearts, stars, clovers, islands and more
 • 10 hand-crafted biomes: Spring Meadow, Lavender Fields, Sakura Garden, Autumn Glow, Frosty Tundra, Golden Wheat, Moonlit Garden, Candy Dream, Ocean Isle and Neon Dreams
 • Ponds, stepping stones, flower beds, butterflies and fireflies
 
 ⚡ UPGRADE & GROW
-• Bigger blades, sharper cuts, faster engines, richer fertilizer
-• Thick, multi-layered grass that gets lusher every level
-• Golden grass, hidden gems and lucky clovers that trigger a cutting frenzy
+• Hundreds of upgrade levels, from a tiny blade to a giant cutting circle
+• Thick, multi-layered grass that gets lusher on every lawn
 • Combos, big satisfying numbers and offline earnings
 
-🧘 ZEN MODE
-• An endless lawn that keeps growing back – no goals, no pressure, just mowing
+🧘 ZEN VIEW
+• Hide every number and button – just you, the lawn and the sounds
 
 Perfect for killing time, winding down before sleep or taking a mindful break.
 
@@ -46,7 +51,7 @@ Perfect for killing time, winding down before sleep or taking a mindful break.
 **App-Name** (max. 30): `Zen Mower: ASMR Rasenmähen`
 
 **Kurzbeschreibung** (max. 80):
-`Entspannendes ASMR-Rasenmähen: knackige Schnitte, ruhige Musik, endlose Gärten.`
+`Entspannendes ASMR-Rasenmähen: Gras wächst nach, ruhige Musik, endlose Rasen.`
 
 **Vollständige Beschreibung:**
 
@@ -60,23 +65,28 @@ Zen Mower ist ein ruhiges, unglaublich befriedigendes Rasenmäh-Spiel zum Abscha
 • Vögel, Grillen, Meeresrauschen und Wind – jeder Garten hat seine eigene Klangwelt
 • Mit Kopfhörern spielen für das volle Erlebnis
 
+🌱 DER RASEN WÄCHST NACH
+• Mähen, nachwachsen lassen, wieder mähen – ein endloser, meditativer Kreislauf
+• Sprinkler: schnelleres Nachwachsen · Dünger: jeder Halm bringt mehr · Klinge & Motor: größer und schneller
+• Goldene Flecken für dicke Boni, versteckte Juwelen und Glücksklee mit Schnitt-Rausch
+
 ✋ MULTI-TOUCH-MÄHEN
 • Schalte bis zu 4 Mäher frei und steuere jeden mit einem eigenen Finger
 • Oder lass den Autopiloten fahren und schau den Streifen beim Entstehen zu
 
-🌸 ENDLOSE GÄRTEN
-• Unbegrenzte Level – Herzen, Sterne, Kleeblätter, Inseln und mehr
+🌸 ENDLOSE RASEN
+• Spare und zieh auf den nächsten Rasen – jeder bringt mehr, deine Upgrades bleiben
+• Herzen, Sterne, Kleeblätter, Inseln und mehr
 • 10 Welten: Frühlingswiese, Lavendelfelder, Sakura-Garten, Herbstleuchten, Frostige Tundra, Goldener Weizen, Mondgarten, Candy-Traum, Meeresinsel und Neon-Träume
 • Teiche, Trittsteine, Blumenbeete, Schmetterlinge und Glühwürmchen
 
 ⚡ VERBESSERN & WACHSEN
-• Größere Klingen, schärfere Schnitte, schnellere Motoren, besserer Dünger
-• Dichtes, mehrschichtiges Gras, das mit jedem Level üppiger wird
-• Goldenes Gras, versteckte Edelsteine und Glücksklee mit Schnitt-Rausch
+• Hunderte Upgrade-Stufen – von der kleinen Klinge bis zum riesigen Schnittkreis
+• Dichtes, mehrschichtiges Gras, das auf jedem Rasen üppiger wird
 • Kombos, große Zahlen und Offline-Einnahmen
 
-🧘 ZEN-MODUS
-• Ein endloser Rasen, der immer wieder nachwächst – keine Ziele, kein Druck, nur Mähen
+🧘 ZEN-ANSICHT
+• Blende alle Zahlen und Knöpfe aus – nur du, der Rasen und die Klänge
 
 Perfekt zum Zeitvertreib, zum Runterkommen vor dem Schlafen oder für eine achtsame Pause.
 

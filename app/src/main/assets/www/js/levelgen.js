@@ -191,7 +191,8 @@
       total += L;
     }
 
-    // Specials: golden patches, flower clusters, hidden gems and a lucky clover.
+    // Static flower clusters (they bloom again when the grass grows back). Golden patches,
+    // gems and lucky clovers are spawned dynamically while you mow.
     const pick = () => cells[Math.floor(rnd() * cells.length)];
     const blob = (i, r, t, prob) => {
       const cx = i % W, cy = (i / W) | 0, R = Math.ceil(r);
@@ -203,30 +204,12 @@
         if (dx * dx + dy * dy <= r * r && rnd() < prob) type[j] = t;
       }
     };
-    const golds = Math.min(5, 1 + Math.floor(N / 6));
-    for (let g = 0; g < golds; g++) blob(pick(), rnd.range(1.4, 2.8), 1, 0.92);
     const flowerClusters = 2 + Math.floor(rnd() * 3);
     for (let f = 0; f < flowerClusters; f++) blob(pick(), rnd.range(1.5, 3), 2, 0.28);
-    const gems = 1 + (N % 5 === 0 ? 2 : 0) + (rnd() < 0.25 ? 1 : 0);
-    const gemCells = [];
-    for (let g = 0; g < gems; g++) {
-      for (let tries = 0; tries < 30; tries++) {
-        const i = pick();
-        if (!type[i]) { type[i] = 3; gemCells.push(i); break; }
-      }
-    }
-    if (N >= 3 && rnd() < 0.4) {
-      for (let tries = 0; tries < 30; tries++) {
-        const i = pick();
-        if (!type[i]) { type[i] = 4; break; }
-      }
-    }
-    // Gems and clovers sit under thick grass so they are a little treasure hunt.
-    for (let i = 0; i < n; i++) if (type[i] >= 3 && layers[i] < 2) { total += 2 - layers[i]; layers[i] = 2; }
 
     return {
       N, W, H, A, S, TW, TH, terrain, grass, layers, type, total, maxL,
-      shape: shapeName, biome: ZM.biomeForLevel(N), value: ZM.levelValue(N),
+      shape: shapeName, biome: ZM.biomeForLevel(N), value: ZM.lawnValue(N),
       cellCount: cells.length, seed: Math.floor(rnd() * 1e9),
     };
   };

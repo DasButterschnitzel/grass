@@ -455,6 +455,17 @@
       for (let i = 0; i < 6; i++) this.play(this.bellBuf, { gain: 0.1, rate: Math.pow(2, (rnd(0, 7) | 0) / 12) * 1.2, when: now + i * 0.05 + Math.random() * 0.02, rev: 0.5, pan: rnd(-0.5, 0.5) });
     }
 
+    goldAppear() {
+      // a soft, high "something shiny appeared" shimmer
+      if (!this.ok()) return;
+      const now = this.ctx.currentTime;
+      const { root, pcs } = this.chordTones();
+      for (let i = 0; i < 3; i++) {
+        const pc = pcs[(pcs.length - 1 - i + pcs.length) % pcs.length];
+        this.play(this.bellBuf, { gain: 0.06, rate: Math.pow(2, (root + 24 + pc - 84) / 12), when: now + i * 0.11, rev: 1, pan: rnd(-0.5, 0.5) });
+      }
+    }
+
     click() {
       if (!this.ok()) return;
       const ctx = this.ctx, now = ctx.currentTime;

@@ -31,16 +31,19 @@
       tap($('btnSettings'), () => this.openSettings());
       tap($('btnShop'), () => this.openShop());
       tap($('btnZen'), () => this.toggleZen());
+      tap($('zenExit'), () => this.toggleZen());
       tap($('btnBoost'), () => this.boost());
+      tap($('levelBox'), () => this.openNextLawn());
+      $('zenExit').innerHTML = I().leaf;
 
       const wrap = $('upgrades');
       this.cards = {};
       for (const u of ZM.UPGRADES) {
         const c = document.createElement('div');
         c.className = 'card';
-        c.innerHTML = `<span class="ico">${I()[u.id]}</span><div class="nm">${ZM.t(u.name)}</div><div class="lv"></div><div class="cost"><i>${I().coin}</i><span></span></div>`;
+        c.innerHTML = `<span class="ico">${I()[u.id]}</span><div class="nm">${ZM.t(u.name)}</div><div class="lv"></div><div class="fx"></div><div class="cost"><i>${I().coin}</i><span></span></div>`;
         wrap.appendChild(c);
-        this.cards[u.id] = { el: c, lv: c.querySelector('.lv'), cost: c.querySelector('.cost span'), costBox: c.querySelector('.cost') };
+        this.cards[u.id] = { el: c, lv: c.querySelector('.lv'), fx: c.querySelector('.fx'), cost: c.querySelector('.cost span'), costBox: c.querySelector('.cost') };
         this.bindHold(c, u.id);
       }
       // keep upgrade bar from moving mowers
@@ -76,7 +79,11 @@
       if (lvl >= u.max) return false;
       const cost = ZM.upgradeCost(id, lvl);
       if (s.cash < cost) {
-        if (!silentFail) { card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake'); if (ZM.audio) ZM.audio.error(); }
+        if (!silentFail) {
+          card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake');
+          if (ZM.audio) ZM.audio.error();
+          this.toast(this.describe(id) + '<br>' + ZM.t('missing', { v: ZM.fmt(cost - s.cash) }), 3.5);
+        }
         return false;
       }
       s.cash -= cost;
@@ -90,8 +97,15 @@
         this.toast(ZM.t('new_mower'));
       }
       if (id === 'bots' && lvl === 0) this.toast(ZM.t('autopilot_on'));
+      else if (lvl === 0 && id !== 'fleet') this.toast(this.describe(id), 3.5);
       if (ZM.onSaveNeeded) ZM.onSaveNeeded();
       return true;
+    }
+
+    describe(id) {
+      const u = ZM.UPG[id], lvl = this.save.upg[id] || 0;
+      const now = ZM.upgradeEffect(id, lvl), next = lvl >= u.max ? '' : ' → ' + ZM.upgradeEffect(id, lvl + 1);
+      return `<b>${ZM.t(u.name)}</b>: ${ZM.t(u.desc)} (${now}${next})`;
     }
 
     // ------------------------------------------------------------ per-frame update
@@ -108,15 +122,20 @@
       if (c.gems !== s.gems) { $('gemText').textContent = s.gems; c.gems = s.gems; }
 
       if (g.level) {
-        const lvStr = g.zen ? ZM.t('Zen Mode') : ZM.t('Level') + ' ' + g.level.N;
+        const lvStr = ZM.t('Lawn') + ' ' + g.level.N;
         if (c.lv !== lvStr) { $('levelNum').textContent = lvStr; c.lv = lvStr; }
         if (c.biome !== g.biome.name) { $('biomeName').textContent = ZM.biomeName(g.biome); c.biome = g.biome.name; }
-        const p = g.zen ? 1 : g.field.progress;
-        const pct = Math.floor(p * 100);
-        if (c.pct !== pct) {
-          $('progressFill').style.width = (g.zen ? 100 : pct) + '%';
-          $('progressText').textContent = g.zen ? '∞' : pct + '%';
-          c.pct = pct;
+        const cost = g.nextLawnCost;
+        const p = ZM.clamp(this.dispCash / cost, 0, 1);
+        const pct = Math.floor(p * 200) / 2;
+        const ready = s.cash >= cost;
+        if (c.pct !== pct) { $('progressFill').style.width = pct + '%'; c.pct = pct; }
+        const label = ready ? ZM.t('Next lawn') + ' ▶' : ZM.t('Next lawn') + ' ' + ZM.fmt(cost);
+        if (c.lawnLbl !== label) { $('progressText').textContent = label; c.lawnLbl = label; }
+        if (c.ready !== ready) {
+          $('levelBox').classList.toggle('ready', ready);
+          c.ready = ready;
+          if (ready && !s.tutorial.lawn) { s.tutorial.lawn = true; this.toast(ZM.t('tip_next_lawn'), 4.5); }
         }
       }
 
@@ -125,7 +144,7 @@
       const showCombo = combo.level > 0;
       if (c.combo !== showCombo) { $('comboChip').classList.toggle('hidden', !showCombo); c.combo = showCombo; }
       if (showCombo) {
-        const txt = ZM.t('COMBO') + ' ×' + (1 + 0.1 * Math.min(15, combo.level)).toFixed(1);
+        const txt = ZM.t('COMBO') + ' ×' + (1 + 0.1 * Math.min(10, combo.level)).toFixed(1);
         if (c.comboTxt !== txt) { $('comboText').textContent = txt; c.comboTxt = txt; }
         $('comboBar').style.transform = `scaleX(${ZM.clamp(combo.timer / 0.9, 0, 1)})`;
       }
@@ -140,7 +159,6 @@
       if (c.boost !== bt) { $('boostLbl').textContent = bt; c.boost = bt; }
       const canAd = this.adsReady && s.boostT < ZM.BOOST_MAX - ZM.BOOST_SECONDS;
       if (c.canAd !== canAd) { $('btnBoost').classList.toggle('ready', canAd && s.boostT <= 0); $('btnBoost').classList.toggle('disabled', !canAd && s.boostT <= 0); c.canAd = canAd; }
-      if (c.zen !== g.zen) { $('btnZen').classList.toggle('active', g.zen); document.getElementById('hud').classList.toggle('zen', g.zen); c.zen = g.zen; }
 
       // upgrade cards (only touch the DOM when something changes)
       for (const u of ZM.UPGRADES) {
@@ -154,13 +172,15 @@
         cd.key = key;
         cd.el.classList.toggle('poor', poor);
         cd.el.classList.toggle('max', max);
-        cd.lv.textContent = max ? 'Lv ' + lvl + ' · MAX' : 'Lv ' + lvl + ' · ' + ZM.upgradeEffect(u.id, lvl);
+        cd.lv.textContent = 'Lv ' + lvl;
+        cd.fx.textContent = max ? ZM.upgradeEffect(u.id, lvl) + ' · MAX' : ZM.upgradeEffect(u.id, lvl) + ' → ' + ZM.upgradeEffect(u.id, lvl + 1);
         cd.cost.textContent = max ? 'MAX' : ZM.fmt(cost);
         cd.costBox.querySelector('i').style.display = max ? 'none' : '';
       }
 
       // tutorial
       if (!s.tutorial.move && g.sessionCuts > 40) { s.tutorial.move = true; this.hideTutorial(); }
+      if (!s.tutorial.regrow && g.sessionCuts > 600) { s.tutorial.regrow = true; this.toast(ZM.t('tip_regrow'), 4.5); }
       if (this.tutTimer > 0) { this.tutTimer -= dt; if (this.tutTimer <= 0) this.hideTutorial(); }
       if (this.toastT > 0) { this.toastT -= dt; if (this.toastT <= 0) $('toast').classList.add('hidden'); }
     }
@@ -171,22 +191,24 @@
         case 'level': {
           if (ev.data.restore) break;
           const N = ev.data.N;
-          if (N > 1 && (N - 1) % ZM.LEVELS_PER_BIOME === 0) this.banner(ZM.t('NEW GARDEN!'), ZM.biomeName(ev.data.biome));
-          else this.banner(ZM.t('LEVEL') + ' ' + N, ZM.biomeName(ev.data.biome));
+          this.banner(N > 1 ? ZM.t('NEW LAWN!') : ZM.t('Lawn') + ' 1', ZM.biomeName(ev.data.biome));
           break;
         }
-        case 'cleared': this.openCleared(ev.data); break;
+        case 'newLawn': this.cache = {}; if (ZM.onLevelAdvance) setTimeout(() => ZM.onLevelAdvance(), 1600); break;
         case 'gem': break;
         case 'flyerArrived': { const el = $('gems'); el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); break; }
         case 'combo': { const el = $('comboChip'); el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse'); break; }
         case 'frenzy': this.toast(ZM.t('clover_toast'), 2.5); break;
-        case 'zen': if (ev.data) this.toast(ZM.t('zen_toast'), 3.5); break;
       }
-      if (g && ev.type === 'cleared') this.cache = {};
     }
 
     // ------------------------------------------------------------ layout
     playRect() {
+      if (this.zenView) {
+        const cs0 = getComputedStyle(document.documentElement);
+        const v = (k) => parseFloat(cs0.getPropertyValue(k)) || 0;
+        return { x: v('--sal') + 6, y: v('--sat') + 10, w: window.innerWidth - v('--sal') - v('--sar') - 12, h: window.innerHeight - v('--sat') - v('--sab') - 20 };
+      }
       const top = $('actions').getBoundingClientRect().bottom + 6;
       const cards = $('upgrades').getBoundingClientRect();
       const bottom = cards.top + 10;
@@ -275,37 +297,33 @@
       return b;
     }
 
-    openCleared(d) {
-      const g = this.game;
-      const nextN = d.N + 1;
-      const nextBiome = ZM.biomeForLevel(nextN);
-      const newGarden = nextBiome.index !== g.biome.index;
+    // The original's progression: spend coins to move to a new, more valuable lawn.
+    openNextLawn() {
+      const g = this.game, s = this.save;
+      const N = g.level.N, cost = g.nextLawnCost;
+      const nb = ZM.biomeForLevel(N + 1);
+      const sw = (c) => ZM.css(c);
+      const preview = `background: radial-gradient(circle at 35% 30%, ${sw(nb.blades[0])}, ${sw(nb.blades[3])} 55%, ${sw(nb.root)} 100%);`;
       const card = this.openModal(`
-        <div class="stars"><span>${I().star}</span><span>${I().star}</span><span>${I().star}</span></div>
-        <div class="m-title">${ZM.t('Field Cleared!')}</div>
-        <div class="m-sub">${ZM.t('Level')} ${d.N} · ${ZM.biomeName(g.biome)}</div>
-        <div class="reward"><i>${I().coin}</i><span>+${ZM.fmt(d.reward)}</span></div>
-        <div id="clrBtns"></div>
-        ${newGarden ? `<div class="next-biome">${ZM.t('Next garden:')} <b>${ZM.biomeName(nextBiome)}</b></div>` : ''}`, { closable: false });
-      const box = card.querySelector('#clrBtns');
-      let done = false;
-      const collect = (mult) => {
-        if (done) return; done = true;
-        clearTimeout(this.autoTimer);
-        const amount = g.collectReward(mult);
-        if (ZM.audio) ZM.audio.coins();
+        <div class="m-title">${ZM.t('Next lawn')}</div>
+        <div class="lawn-prev" style="${preview}"><span>${N + 1}</span></div>
+        <div class="m-sub"><b>${ZM.biomeName(nb)}</b><br>${ZM.t('lawn_info', { m: ZM.LAWN_MULT })}</div>
+        <div class="reward small"><i>${I().coin}</i><span>${ZM.fmt(cost)}</span></div>
+        <div id="lawnBtns"></div>`);
+      const box = card.querySelector('#lawnBtns');
+      const go = document.createElement('button');
+      const afford = s.cash >= cost;
+      go.className = 'btn' + (afford ? '' : ' disabled');
+      go.textContent = afford ? ZM.t('Move there!') : ZM.t('missing', { v: ZM.fmt(cost - s.cash) });
+      go.onclick = () => {
+        if (!g.buyNextLawn()) return;
         this.closeModal();
-        if (mult > 1) this.toast(ZM.t('bonus', { m: mult, v: ZM.fmt(amount) }), 2.2);
-        if (ZM.onLevelAdvance) ZM.onLevelAdvance();
+        if (ZM.onSaveNeeded) ZM.onSaveNeeded();
       };
-      box.appendChild(this.rewardedButton(ZM.t('Collect ×3'), 'level_x3', () => collect(3)));
-      const c = document.createElement('button');
-      c.className = 'btn countdown';
-      c.style.setProperty('--dur', '7s');
-      c.textContent = ZM.t('Collect');
-      c.onclick = () => { if (ZM.audio) ZM.audio.click(); collect(1); };
-      box.appendChild(c);
-      this.autoTimer = setTimeout(() => collect(1), 7000);
+      const later = document.createElement('button');
+      later.className = 'btn ghost'; later.textContent = ZM.t('Keep mowing');
+      later.onclick = () => { if (ZM.audio) ZM.audio.click(); this.closeModal(); };
+      box.append(go, later);
     }
 
     openOffline(amount, secs) {
@@ -346,10 +364,15 @@
       }));
     }
 
+    // Zen view: hide every number and button – just you, the lawn and the sounds.
     toggleZen() {
-      const g = this.game;
-      if (g.state === 'cleared' || g.state === 'sweep') return;
-      if (g.zen) g.stopZen(); else g.startZen();
+      this.zenView = !this.zenView;
+      this.game.zenView = this.zenView;
+      document.body.classList.toggle('zenview', this.zenView);
+      this.hideTutorial();
+      $('toast').classList.add('hidden');
+      if (this.zenView && !this.save.tutorial.zen) { this.save.tutorial.zen = true; this.toast(ZM.t('zen_toast'), 3.5); }
+      if (ZM.onLayout) ZM.onLayout();
     }
 
     openSettings() {

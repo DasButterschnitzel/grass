@@ -13,13 +13,13 @@ A calm, endlessly satisfying lawn-mowing game for Android – inspired by “+1 
 
 | | |
 |---|---|
-| **Grass** | Every blade is GPU-instanced (up to ~17 000 per field) with wind gusts, drifting cloud shadows, blades that bend away from the mower, real lawn stripes in the direction you mowed, and grass that grows in on every new level. |
+| **Grass** | Every blade is GPU-instanced (up to ~17 000 per field) with wind gusts, drifting cloud shadows, blades that bend away from the mower and real lawn stripes in the direction you mowed. Like the original, the lawn **grows back** continuously – you can watch every blade get taller again. |
 | **ASMR audio** | 100 % synthesized at runtime (no audio files): granular crunch/snip/rustle grains whose density follows the actual cut rate, blade whirr, kalimba chimes that always land on the current chord of the live-generated ambient music, nature ambience per biome (birds, crickets, waves, wind, chimes), convolution reverb. |
 | **Multi-touch** | Up to 4 mowers – each finger steers its own mower. Autopilot drives the ones you're not steering. |
-| **Unlimited levels** | 14 field shapes (heart, star, clover, ring island …) + ponds, stepping stones, flower beds and rocks, procedurally generated per level number. 10 biomes, then endless hue-shifted cycles. Grass gets thicker (up to 12 layers) as you progress. |
-| **Progression** | Blade, Sharpness, Engine, Fertilizer, Fleet, Autopilot upgrades; combos up to ×2.5; golden grass ×10; hidden gems; lucky clovers → “frenzy”; offline earnings; 8 mower skins bought with gems. Tuned with an automated bot so levels stay in a ~30–60 s rhythm. |
-| **Zen mode** | Endless lawn that keeps growing back – no goals. |
-| **Monetization** | AdMob adaptive banner, interstitial (max every 3 levels / 150 s, never in the first 2 minutes or right after a rewarded ad), rewarded ads (×3 level reward, ×2 offline earnings, 3-min ×2 cash boost, +5 gems). Google UMP consent (GDPR/EEA) + “Privacy & ad choices” in settings. |
+| **Endless lawns** | As in the original you **buy the next lawn** (price shown on the golden bar at the top). Each lawn pays ×6 per blade and has its own biome and shape: 14 shapes (heart, star, clover, ring island …) with ponds, stepping stones, flower beds and rocks; 10 biomes, then endless hue-shifted cycles. Thicker multi-layer grass on later lawns. |
+| **Progression** | The original's four upgrades – **Blade** (cut size), **Engine** (speed), **Fertilizer** (×(1+level) coins per blade), **Sprinkler** (regrowth speed) – plus **Fleet** (multi-touch mowers) and **Autopilot**. Golden patches (×12 + bonus), hidden gems, lucky clovers → frenzy, combos, offline earnings, 8 mower skins bought with gems. Lawn prices were tuned with an automated bot: ~1 min for the first lawn, then a steady few minutes per lawn, forever. |
+| **Zen view** | Hides every number and button – just the lawn, the mowers and the sounds. |
+| **Monetization** | AdMob adaptive banner, interstitial only when you move to a new lawn (max every 3 min, never in the first 2 minutes or right after a rewarded ad), rewarded ads (×2 offline earnings, 3-min ×2 cash boost, +5 gems). Google UMP consent (GDPR/EEA) + “Privacy & ad choices” in settings. |
 | **Polish** | English + German (auto by device language), haptics, adaptive resolution, save/resume mid-level, back-button handling, edge-to-edge/immersive with notch support. |
 
 ## Architecture
@@ -98,7 +98,7 @@ Without it, release builds fall back to the debug key (fine for testing, not for
 
 ## Tuning
 
-All balancing lives in `app/src/main/assets/www/js/economy.js` (upgrade costs/effects, level value, grass thickness, rewards) and the ad cadence in `js/main.js` (`ZM.onLevelAdvance`).
+All balancing lives in `app/src/main/assets/www/js/economy.js` (upgrade costs/effects, lawn value and price curve, grass thickness) and the ad cadence in `js/main.js` (`ZM.onLevelAdvance`). `tools/qa/pace.js` replays the economy with a bot so you can see minutes-per-lawn before changing numbers.
 
 ## Credits
 
