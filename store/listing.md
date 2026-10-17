@@ -11,12 +11,13 @@
 
 Breathe out. Grab the handle. Mow.
 
-Zen Mower is a calm, deeply satisfying grass-cutting game made for unwinding. Glide through lush, swaying lawns and watch every blade fall with crisp, binaural-feeling ASMR crunches, soft kalimba chimes and gentle ambient music that is generated live – it never repeats.
+Zen Mower is a calm, deeply satisfying grass-cutting game made for unwinding. Glide through lush, swaying lawns and watch every blade fall with crisp, binaural-feeling ASMR crunches and gentle ambient music that is generated live – it never repeats.
 
 🌿 PURE ASMR
 • Every single blade you cut makes sound – the faster you mow, the richer the rustle
-• Mowing plays a gentle kalimba melody – always in perfect harmony with the music
+• No jingle overload: just grass, nature and soft music – an optional kalimba melody is one tap away
 • Birds, crickets, ocean waves and wind – every garden has its own soundscape
+• Light haptic feedback while you mow (soft / strong / off)
 • Play with headphones for the full experience
 
 🧘 ZEN MODE
@@ -28,12 +29,14 @@ Zen Mower is a calm, deeply satisfying grass-cutting game made for unwinding. Gl
 
 🌱 THE LAWN GROWS BACK
 • Mow, watch it grow back, mow again – an endless, meditative loop
+• LAWN COMPLETE! Mow every spot once for a +50% round bonus – little arrows show the last tufts
 • Sprinkler: faster regrowth · Fertilizer: every blade pays more · Blade & Engine: bigger and faster
 • Golden patches pop up for big bonuses, hidden gems and lucky clovers trigger a cutting frenzy
 
 ✋ MULTI-TOUCH MOWING
-• Unlock up to 4 mowers and steer each one with its own finger
-• Or let Autopilot take the wheel and just watch the stripes appear
+• Unlock up to 4 mowers – they follow yours in formation, or steer each one with its own finger
+• Autopilot bonus: tap it and lean back while every mower drives by itself – level it up for longer runs
+• Daily gift with a 7-day streak
 
 🌸 ENDLESS LAWNS
 • Save up and move to the next lawn – every lawn pays more, you keep all upgrades
@@ -42,9 +45,9 @@ Zen Mower is a calm, deeply satisfying grass-cutting game made for unwinding. Gl
 • Ponds, stepping stones, flower beds, butterflies and fireflies
 
 ⚡ UPGRADE & GROW
-• Hundreds of upgrade levels, from a tiny blade to a giant cutting circle
-• Thick, multi-layered grass that gets lusher on every lawn
-• Combos, big satisfying numbers and offline earnings
+• Hundreds of upgrade levels, all on one screen – from a tiny blade to a giant cutting circle
+• Bigger, thicker lawns the further you get
+• Big satisfying numbers and offline earnings
 
 👁 MINIMAL VIEW
 • Hide every number and button – just you, the lawn and the sounds
@@ -64,12 +67,13 @@ Perfect for killing time, winding down before sleep or taking a mindful break.
 
 Durchatmen. Griff packen. Mähen.
 
-Zen Mower ist ein ruhiges, unglaublich befriedigendes Rasenmäh-Spiel zum Abschalten. Gleite über sattgrüne, wogende Wiesen und höre jeden einzelnen Halm fallen – mit knackigem ASMR-Rascheln, sanften Kalimba-Klängen und entspannender Ambient-Musik, die live erzeugt wird und sich nie wiederholt.
+Zen Mower ist ein ruhiges, unglaublich befriedigendes Rasenmäh-Spiel zum Abschalten. Gleite über sattgrüne, wogende Wiesen und höre jeden einzelnen Halm fallen – mit knackigem ASMR-Rascheln und entspannender Ambient-Musik, die live erzeugt wird und sich nie wiederholt.
 
 🌿 PURES ASMR
 • Jeder geschnittene Halm erzeugt Klang – je schneller du mähst, desto voller das Rascheln
-• Beim Mähen entsteht eine sanfte Kalimba-Melodie – immer perfekt harmonisch zur Musik
+• Kein Gebimmel: nur Gras, Natur und sanfte Musik – eine Kalimba-Melodie gibt es auf Wunsch
 • Vögel, Grillen, Meeresrauschen und Wind – jeder Garten hat seine eigene Klangwelt
+• Feines Vibrationsfeedback beim Mähen (sanft / stark / aus)
 • Mit Kopfhörern spielen für das volle Erlebnis
 
 🧘 ZEN-MODUS
@@ -81,12 +85,14 @@ Zen Mower ist ein ruhiges, unglaublich befriedigendes Rasenmäh-Spiel zum Abscha
 
 🌱 DER RASEN WÄCHST NACH
 • Mähen, nachwachsen lassen, wieder mähen – ein endloser, meditativer Kreislauf
+• RASEN KOMPLETT! Mäh jede Stelle einmal für +50 % Runden-Bonus – kleine Pfeile zeigen die letzten Büschel
 • Sprinkler: schnelleres Nachwachsen · Dünger: jeder Halm bringt mehr · Klinge & Motor: größer und schneller
 • Goldene Flecken für dicke Boni, versteckte Juwelen und Glücksklee mit Schnitt-Rausch
 
 ✋ MULTI-TOUCH-MÄHEN
-• Schalte bis zu 4 Mäher frei und steuere jeden mit einem eigenen Finger
-• Oder lass den Autopiloten fahren und schau den Streifen beim Entstehen zu
+• Schalte bis zu 4 Mäher frei – sie folgen deinem in Formation, oder du steuerst jeden mit einem eigenen Finger
+• Autopilot-Bonus: antippen und zurücklehnen, alle Mäher fahren selbst – per Upgrade immer länger
+• Tagesgeschenk mit 7-Tage-Serie
 
 🌸 ENDLOSE RASEN
 • Spare und zieh auf den nächsten Rasen – jeder bringt mehr, deine Upgrades bleiben
@@ -95,9 +101,9 @@ Zen Mower ist ein ruhiges, unglaublich befriedigendes Rasenmäh-Spiel zum Abscha
 • Teiche, Trittsteine, Blumenbeete, Schmetterlinge und Glühwürmchen
 
 ⚡ VERBESSERN & WACHSEN
-• Hunderte Upgrade-Stufen – von der kleinen Klinge bis zum riesigen Schnittkreis
-• Dichtes, mehrschichtiges Gras, das auf jedem Rasen üppiger wird
-• Kombos, große Zahlen und Offline-Einnahmen
+• Hunderte Upgrade-Stufen, alle auf einen Blick – von der kleinen Klinge bis zum riesigen Schnittkreis
+• Größere, dichtere Rasen, je weiter du kommst
+• Große Zahlen und Offline-Einnahmen
 
 👁 MINIMAL-ANSICHT
 • Blende alle Zahlen und Knöpfe aus – nur du, der Rasen und die Klänge

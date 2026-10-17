@@ -23,6 +23,8 @@
       this.stripe = new Uint8Array(n).fill(128);
       this.fresh = new Float32Array(n);
       this.freshList = [];
+      this.pass = new Uint8Array(n); // mowed at least once in the current round
+      this.passCount = 0;
       this.state = new Uint8Array(n * 4);
       this.fx = new Uint8Array(n * 4);
       const cells = [];
@@ -33,6 +35,7 @@
         this.jit[i] = 0.75 + 0.5 * r();
       }
       this.cells = Int32Array.from(cells);
+      this.passTotal = cells.length;
       const restore = savedQ && savedQ.length === n;
       for (const i of this.cells) {
         this.h[i] = restore ? Math.min(this.maxH[i], savedQ[i] / Q) : this.maxH[i];
@@ -72,6 +75,7 @@
       if (h < ZM.CUT_MIN) return 0;
       this.h[i] = 0;
       this.q[i] = 0;
+      if (!this.pass[i]) { this.pass[i] = 1; this.passCount++; }
       const len = Math.hypot(dx, dy) || 1;
       const s = (dx * LIGHT_X + dy * LIGHT_Y) / len;
       this.stripe[i] = Math.round(128 + 127 * Math.max(-1, Math.min(1, s * 1.25)));
@@ -107,6 +111,8 @@
       }
       if (changed) this.dirty = true;
     }
+
+    resetPass() { this.pass.fill(0); this.passCount = 0; }
 
     fillAll() {
       for (const i of this.cells) { this.h[i] = this.maxH[i]; this.q[i] = Math.round(this.h[i] * Q); this.writeCell(i); }

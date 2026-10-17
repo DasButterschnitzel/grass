@@ -32,11 +32,14 @@ class GameBridge internal constructor(activity: MainActivity) {
 
     // -- Haptics ---------------------------------------------------------------------------
 
-    /** kind: "tick" | "light" | "medium" | "heavy" | "success". Unknown kinds are ignored. */
+    /**
+     * kind: "tick" | "light" | "medium" | "heavy" | "success" (unknown kinds are ignored);
+     * level: 0 = off, 1 = soft, 2 = strong (the player's vibration setting).
+     */
     @JavascriptInterface
-    fun haptic(kind: String?) {
+    fun haptic(kind: String?, level: Int) {
         if (activity == null || kind == null) return
-        haptics.perform(kind)
+        haptics.perform(kind, level)
     }
 
     // -- Ads -------------------------------------------------------------------------------

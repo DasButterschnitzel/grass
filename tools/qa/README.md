@@ -6,12 +6,14 @@ Run with `PLAYWRIGHT=/path/to/node_modules/playwright node tools/qa/<script>.js 
 
 | Script | Purpose |
 | --- | --- |
-| `pace.js <url> [lawns] [skill] [econ-json]` | Bot plays N lawns (autopilot steering, buys cheapest upgrade or saves for the next lawn) and prints seconds per lawn – used to tune `economy.js`. `econ-json` overrides the lawn price curve, e.g. `'{"a":1,"b":2,"c":4,"c0":6000}'`. |
+| `pace.js <url> [lawns] [skill] [useAuto] [econ-json]` | Bot plays N lawns with the real game code: a "finger" steers the lead mower (the fleet follows in formation), the autopilot is used whenever it is charged, it buys the cheapest available upgrade or saves for the next lawn. Prints seconds per lawn, rounds and autopilot share – the reference for tuning `economy.js`. `econ-json` overrides the lawn price curve, e.g. `'{"a":0.85,"b":2.2,"c":3.3,"c0":5300}'`. |
+| `sim.py [lawns] [boost] [json]` / `sim.py design <lawns>` | Fast numpy model of the same economy (for exploring parameters before confirming them with `pace.js`). |
 | `lawn.js <url> <out> [lawn] [locale]` | Regrowth, golden patch, "next lawn" dialog, lawn change and zen view screenshots. |
 | `gallery.js <url> <out> 2,6,9` | Screenshots of several lawns/biomes. |
 | `multitouch.js <url> <out>` | Two simultaneous CDP touch points → verifies each finger steers its own mower. |
 | `storeshots.js <url> <out>` | Regenerates the 1080×2160 Play Store screenshots. |
-| `audiotest.js <url> out.webm [secs] [lawn] [mow\|zen:<scene>]` + `analyze.py in.wav spec.png` | Records the live audio mix while mowing (golden patch, gem, next lawn) or in a zen scene and reports loudness / spectral balance. |
+| `audiotest.js <url> out.webm [secs] [lawn] [mow\|pure\|zen:<scene>]` + `analyze.py in.wav spec.png` | Records the live audio mix while mowing (`mow`: golden patch, gem, autopilot, next lawn; `pure`: just mowing) or in a zen scene and reports loudness / spectral balance. `UPG` / `SETTINGS` env vars (JSON) override upgrades and settings, e.g. `SETTINGS='{"melody":"full"}'`. |
+| `klongel.py in.wav [t0] [t1]` | Pitched attacks per second (plucks, bells, chimes) – the "is it tinkling all the time?" check. Pads, beating, noise and steady tones are ignored. |
 | `harmony.py in.wav [0,2,4,7,9]` | Finds the stable tones in a recording and reports energy outside the key, semitone/tritone intervals, roughness and tuning – the "is anything dissonant?" check. |
 
 All scripts drive the game through the `ZM.debug` hooks (`paused`, `step(n, dt)`, `draw()`) so results don't depend on the software renderer's frame rate.

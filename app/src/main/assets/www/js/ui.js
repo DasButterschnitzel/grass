@@ -1,8 +1,34 @@
 'use strict';
-// DOM HUD: wallet, level progress, upgrades, dialogs, toasts, tutorial.
+// DOM HUD: wallet, next lawn, round progress, upgrade grid, autopilot, dialogs, toasts.
 (function (ZM) {
   const $ = (id) => document.getElementById(id);
   const I = () => ZM.ICONS;
+
+  // A slider that works the same on every phone (pointer events, no browser range input:
+  // inside a scrolling dialog those fight with the page and feel "broken").
+  ZM.slider = function (value, onInput, onChange) {
+    const el = document.createElement('div');
+    el.className = 'slider';
+    el.innerHTML = '<div class="track"><div class="fill"></div></div><div class="thumb"></div>';
+    const fill = el.querySelector('.fill'), thumb = el.querySelector('.thumb');
+    let v = ZM.clamp(value, 0, 1);
+    const draw = () => { fill.style.width = v * 100 + '%'; thumb.style.left = `calc(12px + (100% - 24px) * ${v})`; };
+    const at = (e) => { const r = el.getBoundingClientRect(); return ZM.clamp((e.clientX - r.left - 12) / Math.max(1, r.width - 24), 0, 1); };
+    let drag = false;
+    el.addEventListener('pointerdown', (e) => {
+      e.stopPropagation(); e.preventDefault();
+      drag = true; el.classList.add('drag');
+      try { el.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+      v = at(e); draw(); onInput(v);
+    });
+    el.addEventListener('pointermove', (e) => { if (!drag) return; v = at(e); draw(); onInput(v); });
+    const end = () => { if (!drag) return; drag = false; el.classList.remove('drag'); if (onChange) onChange(v); };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+    el.addEventListener('lostpointercapture', end);
+    draw();
+    return el;
+  };
 
   class UI {
     constructor(game) {
@@ -25,10 +51,10 @@
       document.querySelector('#btnZen .act-ico').innerHTML = I().lotus;
       document.querySelector('#btnShop .act-ico').innerHTML = I().shop;
       document.querySelector('#btnView .act-ico').innerHTML = I().eye;
+      document.querySelector('#btnAuto .act-ico').innerHTML = I().bots;
       document.querySelector('#nextPrice i').innerHTML = I().coin;
       $('tutHand').innerHTML = I().hand;
       document.querySelector('#btnZen .act-lbl').textContent = ZM.t('Zen');
-      document.querySelector('#btnShop .act-lbl').textContent = ZM.t('Shop');
       const tap = (el, fn) => el.addEventListener('click', (e) => { e.stopPropagation(); if (ZM.audio) { ZM.audio.unlock(); ZM.audio.click(); } fn(); });
       tap($('btnSettings'), () => this.openSettings());
       tap($('btnShop'), () => this.openShop());
@@ -36,26 +62,30 @@
       tap($('btnView'), () => this.toggleMinimal());
       tap($('viewExit'), () => this.toggleMinimal());
       tap($('btnBoost'), () => this.boost());
+      tap($('btnAuto'), () => this.openAuto());
       tap($('levelBox'), () => this.openNextLawn());
       $('viewExit').innerHTML = I().eye;
 
       const wrap = $('upgrades');
-      // the next lawn is the first "card": what it costs and how close you are
+      // the next lawn is the first tile: what it costs and how close you are
       const lc = document.createElement('div');
       lc.className = 'card lawn';
-      lc.innerHTML = `<div class="pv"></div><div class="nm"></div><div class="lv"></div><div class="fx"></div><div class="cost"><div class="fill"></div><i>${I().coin}</i><span></span></div>`;
+      lc.innerHTML = `<div class="row"><div class="pv"></div><div class="tx"><div class="nm"></div><div class="lv"></div></div></div><div class="fx"></div><div class="cost"><div class="fill"></div><i>${I().coin}</i><span></span></div>`;
       wrap.appendChild(lc);
       this.lawnCard = { el: lc, pv: lc.querySelector('.pv'), nm: lc.querySelector('.nm'), lv: lc.querySelector('.lv'), fx: lc.querySelector('.fx'), cost: lc.querySelector('.cost span'), fill: lc.querySelector('.cost .fill') };
       lc.addEventListener('click', (e) => { e.stopPropagation(); if (ZM.audio) { ZM.audio.unlock(); ZM.audio.click(); } this.openNextLawn(); });
+      // all other upgrades in one 3×2 grid – nothing hidden behind a scroll
       this.cards = {};
       for (const u of ZM.UPGRADES) {
+        if (u.id === 'auto') continue; // lives on the autopilot button
         const c = document.createElement('div');
         c.className = 'card';
-        c.innerHTML = `<span class="ico">${I()[u.id]}</span><div class="nm">${ZM.t(u.name)}</div><div class="lv"></div><div class="fx"></div><div class="cost"><i>${I().coin}</i><span></span></div>`;
+        c.innerHTML = `<div class="row"><span class="ico">${I()[u.id]}</span><div class="tx"><div class="nm">${ZM.t(u.name)}</div><div class="lv"></div></div></div><div class="fx"></div><div class="cost"><i>${I().coin}</i><span></span></div>`;
         wrap.appendChild(c);
         this.cards[u.id] = { el: c, lv: c.querySelector('.lv'), fx: c.querySelector('.fx'), cost: c.querySelector('.cost span'), costBox: c.querySelector('.cost') };
         this.bindHold(c, u.id);
       }
+      this.lastToast = {};
       // keep upgrade bar from moving mowers
       wrap.addEventListener('pointerdown', (e) => e.stopPropagation());
     }
@@ -85,29 +115,34 @@
 
     buy(id, silentFail) {
       const s = this.save, u = ZM.UPG[id], lvl = s.upg[id] || 0;
-      const card = this.cards[id].el;
+      const card = this.cards[id] ? this.cards[id].el : null;
       if (lvl >= u.max) return false;
+      const lock = ZM.upgradeLock(id, lvl, this.game.level.N);
       const cost = ZM.upgradeCost(id, lvl);
-      if (s.cash < cost) {
+      if (lock || s.cash < cost) {
         if (!silentFail) {
-          card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake');
+          if (card) { card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake'); }
           if (ZM.audio) ZM.audio.error();
-          this.toast(this.describe(id) + '<br>' + ZM.t('missing', { v: ZM.fmt(cost - s.cash) }), 3.5);
+          // explain once, don't nag on every tap
+          const now = performance.now();
+          if (!this.lastToast[id] || now - this.lastToast[id] > 4000) {
+            this.lastToast[id] = now;
+            this.toast(this.describe(id) + '<br>' + (lock ? ZM.t('unlock_at', { n: lock }) : ZM.t('missing', { v: ZM.fmt(cost - s.cash) })), 2.6);
+          }
         }
         return false;
       }
       s.cash -= cost;
       s.upg[id] = lvl + 1;
       this.game.recalc();
-      card.classList.remove('bought'); void card.offsetWidth; card.classList.add('bought');
-      if (ZM.audio) ZM.audio.upgrade(lvl);
+      if (card) { card.classList.remove('bought', 'hint'); void card.offsetWidth; card.classList.add('bought'); }
+      if (ZM.audio) ZM.audio.upgrade();
       ZM.Native.haptic('light');
+      s.tutorial.buy = true;
       if (id === 'fleet') {
         if (!s.tutorial.fleet) { s.tutorial.fleet = true; this.showTutorial('two'); }
-        this.toast(ZM.t('new_mower'));
-      }
-      if (id === 'bots' && lvl === 0) this.toast(ZM.t('autopilot_on'));
-      else if (lvl === 0 && id !== 'fleet') this.toast(this.describe(id), 3.5);
+        this.toast(ZM.t('new_mower'), 4);
+      } else if (lvl === 0 && id !== 'auto') this.toast(this.describe(id), 3);
       if (ZM.onSaveNeeded) ZM.onSaveNeeded();
       return true;
     }
@@ -173,14 +208,22 @@
         }
       }
 
-      // chips
-      const combo = g.combo;
-      const showCombo = combo.level > 0;
-      if (c.combo !== showCombo) { $('comboChip').classList.toggle('hidden', !showCombo); c.combo = showCombo; }
-      if (showCombo) {
-        const txt = ZM.t('COMBO') + ' ×' + (1 + 0.1 * Math.min(10, combo.level)).toFixed(1);
-        if (c.comboTxt !== txt) { $('comboText').textContent = txt; c.comboTxt = txt; }
-        $('comboBar').style.transform = `scaleX(${ZM.clamp(combo.timer / 0.9, 0, 1)})`;
+      // round progress ("mow everything once")
+      const rp = g.roundProgress, rpct = Math.min(100, Math.floor(rp * 100));
+      const rtxt = ZM.t('Round') + ' ' + (g.rounds + 1) + ' · ' + rpct + '%';
+      if (c.rtxt !== rtxt) {
+        $('roundTxt').textContent = rtxt; $('roundFill').style.width = rpct + '%'; c.rtxt = rtxt;
+        $('roundPill').classList.toggle('near', rp >= 0.85);
+      }
+      // autopilot button: ready / running / charging
+      const ar = g.autoReadyIn, aOn = g.autoT > 0;
+      const aState = aOn ? 'on' : ar <= 0 ? 'ready' : 'wait';
+      const aLbl = aOn ? Math.ceil(g.autoT) + 's' : ar <= 0 ? ZM.t('Auto') : ZM.fmtTime(ar);
+      if (c.aLbl !== aLbl) { $('autoLbl').textContent = aLbl; c.aLbl = aLbl; }
+      if (c.aState !== aState) {
+        const b = $('btnAuto');
+        b.classList.toggle('ready', aState === 'ready'); b.classList.toggle('on', aState === 'on');
+        c.aState = aState;
       }
       const fr = g.frenzyT > 0;
       if (c.fr !== fr) { $('frenzyChip').classList.toggle('hidden', !fr); c.fr = fr; }
@@ -189,28 +232,32 @@
         if (c.frT !== t) { $('frenzyText').textContent = t; c.frT = t; }
       }
       // boost button
-      const bt = s.boostT > 0 ? '×2 ' + ZM.fmtTime(s.boostT) : ZM.t('×2 Cash');
+      const bt = s.boostT > 0 ? '×2 ' + ZM.fmtTime(s.boostT) : '×2';
       if (c.boost !== bt) { $('boostLbl').textContent = bt; c.boost = bt; }
       const canAd = this.adsReady && s.boostT < ZM.BOOST_MAX - ZM.BOOST_SECONDS;
       if (c.canAd !== canAd) { $('btnBoost').classList.toggle('ready', canAd && s.boostT <= 0); $('btnBoost').classList.toggle('disabled', !canAd && s.boostT <= 0); c.canAd = canAd; }
 
-      // upgrade cards (only touch the DOM when something changes)
+      // upgrade tiles (only touch the DOM when something changes)
       for (const u of ZM.UPGRADES) {
+        const cd = this.cards[u.id];
+        if (!cd) continue;
         const lvl = s.upg[u.id] || 0;
         const max = lvl >= u.max;
+        const lock = max ? 0 : ZM.upgradeLock(u.id, lvl, g.level.N);
         const cost = max ? 0 : ZM.upgradeCost(u.id, lvl);
-        const poor = !max && s.cash < cost;
-        const key = lvl + '|' + poor + '|' + max;
-        const cd = this.cards[u.id];
+        const poor = !max && !lock && s.cash < cost;
+        const key = lvl + '|' + poor + '|' + max + '|' + lock + '|' + (lock ? '' : ZM.fmt(cost));
         if (cd.key === key) continue;
         cd.key = key;
         cd.el.classList.toggle('poor', poor);
         cd.el.classList.toggle('max', max);
+        cd.el.classList.toggle('locked', !!lock);
         cd.lv.textContent = 'Lv ' + lvl;
         cd.fx.textContent = max ? ZM.upgradeEffect(u.id, lvl) + ' · MAX' : ZM.upgradeEffect(u.id, lvl) + ' → ' + ZM.upgradeEffect(u.id, lvl + 1);
-        cd.cost.textContent = max ? 'MAX' : ZM.fmt(cost);
-        cd.costBox.querySelector('i').style.display = max ? 'none' : '';
+        cd.cost.textContent = max ? 'MAX' : lock ? ZM.t('from_lawn', { n: lock }) : ZM.fmt(cost);
+        cd.costBox.querySelector('i').style.display = max || lock ? 'none' : '';
       }
+      this.coach(dt);
 
       // tutorial
       if (!s.tutorial.move && g.sessionCuts > 40) { s.tutorial.move = true; this.hideTutorial(); }
@@ -231,8 +278,14 @@
         case 'newLawn': this.cache = {}; if (ZM.onLevelAdvance) setTimeout(() => ZM.onLevelAdvance(), 1600); break;
         case 'gem': break;
         case 'flyerArrived': { const el = $('gems'); el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); break; }
-        case 'combo': { const el = $('comboChip'); el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse'); break; }
         case 'frenzy': this.toast(ZM.t('clover_toast'), 2.5); break;
+        case 'round': {
+          const el = $('roundPill'); el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse');
+          if (ev.data.big) this.banner(ZM.t('LAWN COMPLETE!'), '+' + ZM.fmt(ev.data.bonus));
+          if (!this.save.tutorial.round) { this.save.tutorial.round = true; this.toast(ZM.t('tip_round'), 5); }
+          break;
+        }
+        case 'auto': if (!this.save.tutorial.autoUse) { this.save.tutorial.autoUse = true; this.toast(ZM.t('tip_auto_on', { s: ev.data }), 4); } break;
       }
     }
 
@@ -308,6 +361,7 @@
       this.modalOpen = null;
       clearTimeout(this.autoTimer);
       if (opts && opts.onClose) opts.onClose();
+      if (ZM.onModalClosed) ZM.onModalClosed();
     }
     onBack() {
       if (!this.modalOpen) return false;
@@ -358,6 +412,115 @@
       later.className = 'btn ghost'; later.textContent = ZM.t('Keep mowing');
       later.onclick = () => { if (ZM.audio) ZM.audio.click(); this.closeModal(); };
       box.append(go, later);
+    }
+
+    // First steps: point at the first affordable upgrade, introduce the autopilot.
+    coach(dt) {
+      const s = this.save, g = this.game;
+      this.coachT = (this.coachT || 0) + dt;
+      if (this.coachT < 1) return;
+      this.coachT = 0;
+      if (!s.tutorial.buy && g.sessionCuts > 120 && !this.modalOpen) {
+        let best = null;
+        for (const id of ['blade', 'engine', 'fert', 'sprinkler']) {
+          const cost = ZM.upgradeCost(id, s.upg[id] || 0);
+          if (s.cash >= cost && (!best || cost < best[1])) best = [id, cost];
+        }
+        this.hintId = best ? best[0] : null;
+        for (const id of Object.keys(this.cards)) this.cards[id].el.classList.toggle('hint', this.hintId === id);
+        if (best && !this.coachToast) { this.coachToast = true; this.toast(ZM.t('tip_buy'), 4); }
+      } else if (s.tutorial.buy && this.hintId) {
+        this.cards[this.hintId].el.classList.remove('hint'); this.hintId = null;
+      }
+      if (!s.tutorial.autoIntro && g.level.N >= 2 && g.autoReadyIn <= 0 && !this.modalOpen) {
+        s.tutorial.autoIntro = true;
+        this.toast(ZM.t('tip_auto'), 5);
+      }
+    }
+
+    // The autopilot is a bonus: X seconds of mowing by itself, then it recharges.
+    openAuto() {
+      const g = this.game, s = this.save;
+      const lvl = s.upg.auto || 0, u = ZM.UPG.auto, max = lvl >= u.max;
+      const dur = g.stats.autoDur, ready = g.autoReadyIn <= 0, on = g.autoT > 0;
+      const card = this.openModal(`
+        <div class="m-title">${ZM.t('Autopilot')}</div>
+        <div class="big-ico">${I().bots}</div>
+        <div class="m-sub">${ZM.t('auto_sub', { s: dur, c: ZM.fmtTime(ZM.AUTO_COOLDOWN) })}</div>
+        <div class="m-rows">
+          <div class="m-row"><span>${ZM.t('Duration')}</span><b>${dur}s${max ? '' : ' → ' + ZM.upgradeEffect('auto', lvl + 1)}</b></div>
+          <div class="m-row"><span>${ZM.t('Status')}</span><b>${on ? ZM.t('auto_running', { s: Math.ceil(g.autoT) }) : ready ? ZM.t('auto_ready') : ZM.t('auto_wait', { t: ZM.fmtTime(g.autoReadyIn) })}</b></div>
+        </div>
+        <div id="autoBtns"></div>`);
+      const box = card.querySelector('#autoBtns');
+      if (ready && !on) {
+        const go = document.createElement('button'); go.className = 'btn'; go.textContent = ZM.t('Start autopilot');
+        go.onclick = () => { this.closeModal(); g.activateAuto(); };
+        box.appendChild(go);
+      } else if (!on) {
+        box.appendChild(this.rewardedButton(ZM.t('Recharge now'), 'auto_recharge', () => {
+          s.autoReadyAt = 0; this.closeModal(); g.activateAuto(true);
+          if (ZM.onSaveNeeded) ZM.onSaveNeeded();
+        }));
+      }
+      if (!max) {
+        const cost = ZM.upgradeCost('auto', lvl);
+        const up = document.createElement('button');
+        up.className = 'btn ghost' + (s.cash >= cost ? '' : ' disabled');
+        up.innerHTML = `<span>${ZM.t('Longer')} +6s</span><i>${I().coin}</i><span>${ZM.fmt(cost)}</span>`;
+        up.onclick = () => {
+          if (s.cash < cost) return;
+          s.cash -= cost; s.upg.auto = lvl + 1; g.recalc();
+          if (ZM.audio) ZM.audio.upgrade();
+          ZM.Native.haptic('light');
+          if (ZM.onSaveNeeded) ZM.onSaveNeeded();
+          this.openAuto();
+        };
+        box.appendChild(up);
+      }
+    }
+
+    // Daily gift with a 7-day streak. Shown once per calendar day, after any other dialog.
+    checkDaily() {
+      const s = this.save, today = new Date().toDateString();
+      if (s.daily.last === today || this.modalOpen) return false;
+      const yesterday = new Date(Date.now() - 86400000).toDateString();
+      s.daily.streak = s.daily.last === yesterday ? (s.daily.streak % 7) + 1 : 1;
+      s.daily.last = today;
+      this.openDaily(s.daily.streak);
+      return true;
+    }
+
+    openDaily(day) {
+      const s = this.save, g = this.game;
+      const plan = [['c', 60], ['c', 90], ['g', 5], ['c', 120], ['a', 120], ['c', 180], ['g', 15]];
+      const [kind, amt] = plan[day - 1];
+      const coins = Math.max(50, (s.rate || 0) * amt, g.nextLawnCost * 0.04 * (amt / 60));
+      const days = plan.map(([k], i) => `<div class="day ${i + 1 < day ? 'done' : i + 1 === day ? 'today' : ''}">${ZM.t('Day')} ${i + 1}<i>${I()[k === 'g' ? 'gem' : k === 'a' ? 'bots' : 'coin']}</i></div>`).join('');
+      const what = kind === 'g' ? `<i>${I().gem}</i><span>+${amt}</span>` : `<i>${I().coin}</i><span>+${ZM.fmt(coins)}</span>`;
+      const card = this.openModal(`
+        <div class="m-title">${ZM.t('Daily gift')}</div>
+        <div class="m-sub">${ZM.t('daily_sub', { d: day })}${kind === 'a' ? '<br>' + ZM.t('daily_auto') : ''}</div>
+        <div class="days">${days}</div>
+        <div class="reward small">${what}</div>
+        <div id="dailyBtns"></div>`, { closable: false });
+      const box = card.querySelector('#dailyBtns');
+      let done = false;
+      const take = (mult) => {
+        if (done) return; done = true;
+        if (kind === 'g') s.gems += amt * mult;
+        else { s.cash += coins * mult; s.stats.totalEarned += coins * mult; }
+        if (kind === 'a') s.autoReadyAt = 0;
+        if (ZM.audio) { if (kind === 'g') ZM.audio.gem(); else ZM.audio.coins(); }
+        ZM.Native.haptic('success');
+        this.closeModal();
+        if (ZM.onSaveNeeded) ZM.onSaveNeeded();
+      };
+      box.appendChild(this.rewardedButton(ZM.t('Double it ×2'), 'daily_x2', () => take(2)));
+      const c = document.createElement('button');
+      c.className = 'btn'; c.textContent = ZM.t('Collect');
+      c.onclick = () => { if (ZM.audio) ZM.audio.click(); take(1); };
+      box.appendChild(c);
     }
 
     openOffline(amount, secs, subKey) {
@@ -414,29 +577,36 @@
       const s = this.save.settings;
       const card = this.openModal(`
         <div class="m-title">${ZM.t('Settings')}</div>
-        <div class="set-row"><span>${ZM.t('Sound effects')}</span><input type="range" min="0" max="1" step="0.05" value="${s.sfx}" data-k="sfx"></div>
-        <div class="set-row"><span>${ZM.t('Music')}</span><input type="range" min="0" max="1" step="0.05" value="${s.music}" data-k="music"></div>
-        <div class="set-row"><span>${ZM.t('Nature ambience')}</span><input type="range" min="0" max="1" step="0.05" value="${s.amb}" data-k="amb"></div>
-        <div class="set-row"><span>${ZM.t('Vibration')}</span><button class="toggle ${s.haptics ? 'on' : ''}" data-t="haptics"></button></div>
+        <div class="set-row" data-sl="master"><span>${ZM.t('Volume')}</span></div>
+        <div class="set-row" data-sl="sfx"><span>${ZM.t('Sound effects')}</span></div>
+        <div class="set-row" data-sl="music"><span>${ZM.t('Music')}</span></div>
+        <div class="set-row" data-sl="amb"><span>${ZM.t('Nature ambience')}</span></div>
+        <div class="set-row"><span>${ZM.t('Melody while mowing')}</span><div class="seg" data-s="melody"><button data-v="off">${ZM.t('Off')}</button><button data-v="soft">${ZM.t('Soft')}</button><button data-v="full">${ZM.t('Full')}</button></div></div>
+        <div class="set-row"><span>${ZM.t('Vibration')}</span><div class="seg" data-s="vib" data-num="1"><button data-v="0">${ZM.t('Off')}</button><button data-v="1">${ZM.t('Soft')}</button><button data-v="2">${ZM.t('Strong')}</button></div></div>
         <div class="set-row"><span>${ZM.t('Steering')}</span><div class="seg" data-s="control"><button data-v="follow">${ZM.t('Follow finger')}</button><button data-v="drag">${ZM.t('Drag')}</button></div></div>
         <div class="set-row"><span>${ZM.t('Graphics')}</span><div class="seg" data-s="quality"><button data-v="auto">${ZM.t('Auto')}</button><button data-v="high">${ZM.t('High')}</button><button data-v="low">${ZM.t('Saver')}</button></div></div>
         <div id="setBtns"></div>
         <div class="foot">Zen Mower ${ZM.Native.appVersion()}<br>Fonts: Lilita One & Varela Round (SIL Open Font License)</div>
         <button class="linkish" id="resetBtn">${ZM.t('Reset progress')}</button>`);
-      card.querySelectorAll('input[type=range]').forEach((el) => {
-        el.addEventListener('input', () => { s[el.dataset.k] = parseFloat(el.value); if (ZM.audio) ZM.audio.applyVolumes(); });
-        el.addEventListener('change', () => ZM.onSaveNeeded && ZM.onSaveNeeded());
+      const save = () => ZM.onSaveNeeded && ZM.onSaveNeeded();
+      card.querySelectorAll('[data-sl]').forEach((row) => {
+        const k = row.dataset.sl;
+        row.appendChild(ZM.slider(s[k] === undefined ? 1 : s[k], (v) => { s[k] = Math.round(v * 100) / 100; if (ZM.audio) ZM.audio.applyVolumes(); }, () => {
+          save();
+          // let you hear what you just set
+          if (ZM.audio) { if (k === 'sfx' || k === 'master') ZM.audio.upgrade(); }
+        }));
       });
-      card.querySelectorAll('.toggle').forEach((el) => el.addEventListener('click', () => {
-        s[el.dataset.t] = !s[el.dataset.t]; el.classList.toggle('on', s[el.dataset.t]);
-        if (ZM.audio) ZM.audio.click();
-        if (el.dataset.t === 'haptics' && s.haptics) ZM.Native.haptic('medium');
-      }));
       card.querySelectorAll('.seg').forEach((seg) => {
-        const k = seg.dataset.s;
-        const sync = () => seg.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === s[k]));
+        const k = seg.dataset.s, num = !!seg.dataset.num;
+        const sync = () => seg.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === String(s[k])));
         sync();
-        seg.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { s[k] = b.dataset.v; sync(); if (ZM.audio) ZM.audio.click(); if (k === 'quality' && ZM.onQuality) ZM.onQuality(); }));
+        seg.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+          s[k] = num ? parseInt(b.dataset.v, 10) : b.dataset.v; sync(); save();
+          if (ZM.audio) ZM.audio.click();
+          if (k === 'quality' && ZM.onQuality) ZM.onQuality();
+          if (k === 'vib') ZM.Native.haptic('heavy');
+        }));
       });
       const btns = card.querySelector('#setBtns');
       if (ZM.Native.isPrivacyOptionsRequired()) {
@@ -476,7 +646,7 @@
             if (owned) { s.skin = sk.id; if (ZM.audio) ZM.audio.click(); render(); return; }
             if (s.gems < sk.price) { if (ZM.audio) ZM.audio.error(); this.toast(ZM.t('need_gems', { n: sk.price - s.gems })); return; }
             s.gems -= sk.price; s.skins.push(sk.id); s.skin = sk.id;
-            if (ZM.audio) ZM.audio.upgrade(3);
+            if (ZM.audio) ZM.audio.upgrade();
             ZM.Native.haptic('success');
             render();
             if (ZM.onSaveNeeded) ZM.onSaveNeeded();

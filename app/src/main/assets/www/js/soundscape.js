@@ -97,7 +97,7 @@
   // "Aeolian harp": the wind makes soft tones – a stack of fifths from the key.
   P.make_aeolian = function () {
     const ctx = this.ctx, out = ctx.createGain(); out.connect(this.windBus);
-    const s = ctx.createGain(); s.gain.value = 0.9; out.connect(s); s.connect(this.ambRev);
+    const s = ctx.createGain(); s.gain.value = 0.9; out.connect(s); s.connect(this.windWet);
     const voices = [], srcs = [];
     for (let i = 0; i < 3; i++) {
       const o = ctx.createOscillator(); o.type = 'sine';
@@ -121,7 +121,7 @@
     const g = ctx.createGain(); g.gain.value = 0.8;
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 7000; lp.Q.value = 0.4;
     src.connect(lp); lp.connect(g); g.connect(out);
-    const s = ctx.createGain(); s.gain.value = 0.25; g.connect(s); s.connect(this.ambRev);
+    const s = ctx.createGain(); s.gain.value = 0.25; g.connect(s); s.connect(this.waterWet);
     return { out, srcs: [src], g, lp };
   };
 
@@ -132,7 +132,7 @@
     const src = this.loopSrc(this.brookBuf);
     const g = ctx.createGain(); g.gain.value = 0.7;
     src.connect(g); g.connect(out);
-    const s = ctx.createGain(); s.gain.value = 0.3; g.connect(s); s.connect(this.ambRev);
+    const s = ctx.createGain(); s.gain.value = 0.3; g.connect(s); s.connect(this.waterWet);
     return { out, srcs: [src], g, root };
   };
 
@@ -180,11 +180,13 @@
     if (S.waves > 0 && now > e.wave) { this.wave(t); e.wave = now + rnd(6.5, 10); }
     if (S.thunder > 0 && now > e.thunder) { this.thunder(t); e.thunder = now + rnd(45, 100) / S.thunder; }
     if (S.bowl > 0 && now > e.bowl) { this.zenBowl(t); e.bowl = now + rnd(38, 75) / S.bowl; }
-    if (S.chimes > 0 && now > e.chime && g > 0.55 && g > prevG) { this.windChimes(t); e.chime = now + rnd(5, 14) / S.chimes; }
+    // while you mow, the grass is the star: chimes wait for a pause (zen scenes excepted)
+    const busy = !(this.musicStyle && this.musicStyle.zen) && this.mowLevel > 0.12;
+    if (S.chimes > 0 && now > e.chime && g > 0.55 && g > prevG && !busy) { this.windChimes(t); e.chime = now + rnd(5, 14) / S.chimes; }
     if (S.leaves > 0 && Math.random() < S.leaves * g * 0.9) {
       this.play(this.rustles[(Math.random() * this.rustles.length) | 0], {
         bus: this.windBus, gain: rnd(0.03, 0.09) * S.leaves, rate: rnd(1.1, 1.7), pan: rnd(-0.85, 0.85),
-        filter: { type: 'highpass', freq: 1100 }, when: now + Math.random() * 0.1, rev: 0.3, revBus: this.ambRev,
+        filter: { type: 'highpass', freq: 1100 }, when: now + Math.random() * 0.1, rev: 0.3,
       });
     }
     for (const c of this.crickets) {
@@ -201,7 +203,7 @@
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 7000 - dist * 3000;
     const pan = ctx.createStereoPanner(); pan.pan.value = rnd(-0.85, 0.85);
     out.connect(lp); lp.connect(pan); pan.connect(this.lifeBus);
-    const s = ctx.createGain(); s.gain.value = 0.35 + dist * 0.6; pan.connect(s); s.connect(this.ambRev);
+    const s = ctx.createGain(); s.gain.value = 0.35 + dist * 0.6; pan.connect(s); s.connect(this.lifeWet);
     this.track(out, t0);
     const kind = pick(['whistle', 'trill', 'warble', 'warble', 'song']);
     const oct = kind === 'song' ? 2 : 3;
@@ -264,7 +266,7 @@
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1100;
     const pan = ctx.createStereoPanner(); pan.pan.value = rnd(-0.7, 0.7);
     out.connect(lp); lp.connect(pan); pan.connect(this.lifeBus);
-    const s = ctx.createGain(); s.gain.value = 0.9; pan.connect(s); s.connect(this.ambRev);
+    const s = ctx.createGain(); s.gain.value = 0.9; pan.connect(s); s.connect(this.lifeWet);
     this.track(out, t0);
     let t = t0;
     for (const [mm, dur, gap] of [[m, 0.42, 0.32], [m, 0.2, 0.08], [lo, 0.62, 0]]) {
@@ -288,7 +290,7 @@
     const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1500; bp.Q.value = 2.5;
     const pan = ctx.createStereoPanner(); pan.pan.value = rnd(-0.8, 0.8);
     out.connect(bp); bp.connect(pan); pan.connect(this.lifeBus);
-    const s = ctx.createGain(); s.gain.value = 0.9; pan.connect(s); s.connect(this.ambRev);
+    const s = ctx.createGain(); s.gain.value = 0.9; pan.connect(s); s.connect(this.lifeWet);
     this.track(out, t0);
     let t = t0;
     const n = 2 + ((Math.random() * 3) | 0);
@@ -312,7 +314,7 @@
     const ctx = this.ctx, S = this.soundscape;
     const dur = rnd(6.5, 9), peak = t0 + dur * 0.38, end = t0 + dur;
     const pan = ctx.createStereoPanner(); pan.pan.value = rnd(-0.5, 0.5); pan.connect(this.waterBus);
-    const rs = ctx.createGain(); rs.gain.value = 0.3; pan.connect(rs); rs.connect(this.ambRev);
+    const rs = ctx.createGain(); rs.gain.value = 0.3; pan.connect(rs); rs.connect(this.waterWet);
     // the swell & crash
     const src = ctx.createBufferSource(); src.buffer = this.pink; src.loop = true;
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.4;
@@ -346,7 +348,7 @@
       g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(a, t + rnd(0.8, 1.6)); g.gain.exponentialRampToValueAtTime(0.0001, t + rnd(6, 9));
       const pan = ctx.createStereoPanner(); pan.pan.value = rnd(-0.6, 0.6);
       src.connect(lp); lp.connect(g); g.connect(pan); pan.connect(this.waterBus);
-      const s = ctx.createGain(); s.gain.value = 0.6; pan.connect(s); s.connect(this.ambRev);
+      const s = ctx.createGain(); s.gain.value = 0.6; pan.connect(s); s.connect(this.waterWet);
       src.start(t, Math.random() * 4); src.stop(t + 9.5);
     }
   };
@@ -357,7 +359,7 @@
     let t = t0;
     const n = 2 + ((Math.random() * 4) | 0);
     for (let i = 0; i < n; i++) {
-      this.tone(k.note((Math.random() * 10) | 0, 1) + 12, 'chime', { gain: rnd(0.02, 0.05) * S.chimes, when: t, pan: rnd(-0.7, 0.7), rev: 0.9, bus: this.lifeBus, revBus: this.ambRev });
+      this.tone(k.note((Math.random() * 10) | 0, 1) + 12, 'chime', { gain: rnd(0.02, 0.05) * S.chimes, when: t, pan: rnd(-0.7, 0.7), rev: 0.9, bus: this.lifeBus });
       t += rnd(0.08, 0.5);
     }
   };

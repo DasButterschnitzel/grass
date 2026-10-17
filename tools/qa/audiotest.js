@@ -1,6 +1,7 @@
 // Records the live audio mix while the game is played by a script.
 // usage: node audiotest.js <url> <out.webm> [secs] [lawn] [scenario]
-//   scenario "mow"   – two mowers mow non-stop (combos), golden patch, gem, next lawn
+//   scenario "mow"   – two mowers mow non-stop, golden patch, gem, autopilot, next lawn
+//   scenario "pure"  – just mowing, no events (what you hear most of the time)
 //   scenario "zen:<scene>" – zen mode with that scene, one finger mowing now and then
 // Convert + analyse: ffmpeg -i out.webm out.wav && python3 harmony.py out.wav 0,2,4,7,9
 const { chromium } = require(process.env.PLAYWRIGHT || 'playwright');
@@ -12,9 +13,12 @@ const fs = require('fs');
   const page = await ctx.newPage();
   page.on('pageerror', (e) => console.log('[pageerror]', e.message));
   page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') console.log('[' + m.type() + ']', m.text()); });
-  await page.addInitScript((lv) => localStorage.setItem('zenmower.save.v1', JSON.stringify({ v: 2, level: +lv, cash: 0, gems: 5,
-    tutorial: { move: true, fleet: true, lawn: true, regrow: true, zen: true },
-    upg: { blade: 8, engine: 6, fert: 3, sprinkler: 12, fleet: 1, bots: 0 } })), lawn);
+  // UPG='{"blade":20,...}' overrides the upgrade levels, SETTINGS='{"melody":"full"}' the settings
+  const upg = JSON.parse(process.env.UPG || '{"blade": 8, "engine": 6, "fert": 3, "sprinkler": 12, "fleet": 1, "auto": 2}');
+  const settings = JSON.parse(process.env.SETTINGS || '{}');
+  await page.addInitScript(([lv, upg, settings]) => localStorage.setItem('zenmower.save.v1', JSON.stringify({ v: 3, level: +lv, cash: 0, gems: 5,
+    daily: { last: new Date().toDateString(), streak: 1 }, settings,
+    tutorial: { move: true, fleet: true, lawn: true, regrow: true, zen: true, zenMode: true, buy: true, round: true, autoIntro: true, autoUse: true }, upg })), [lawn, upg, settings]);
   await page.goto(url, { waitUntil: 'load' });
   await page.waitForFunction(() => window.ZM && ZM.ready && ZM.debug, null, { timeout: 30000 });
   const b64 = await page.evaluate(async ([secs, scenario]) => {
@@ -42,8 +46,10 @@ const fs = require('fs');
     const iv = setInterval(() => {
       const zen = scenario.startsWith('zen:');
       const mowing = zen ? (t > 3 && t < secs * 0.45) || (t > secs * 0.6 && t < secs - 3) : t > 2 && t < secs - 4;
-      g.mowers.forEach((m, k) => { if (mowing && k < 2) steer(m, 50 + k); else { m.pointer = null; m.hasTarget = false; } });
-      if (!zen) {
+      const auto = g.autoT > 0; // the autopilot drives: lift the fingers
+      g.mowers.forEach((m, k) => { if (mowing && k < 2 && !auto) steer(m, 50 + k); else { m.pointer = null; m.hasTarget = false; } });
+      if (!zen && scenario !== 'pure') {
+        if (t > secs * 0.4 && !done.auto) { done.auto = 1; g.activateAuto(true); }
         if (t > 8 && !done.gold) { done.gold = 1; g.spawnGoldenPatch(); if (g.patch) { g.mowers[0].tx = g.patch.x; g.mowers[0].ty = g.patch.y; g.mowers[0]._tt = t + 1.5; } }
         if (t > 14 && !done.gem) { done.gem = 1; const i = g.field.cells[(g.field.cells.length / 3) | 0]; g.collectGem(i); }
         if (t > secs * 0.7 && !done.lawn) { done.lawn = 1; ZM.save.cash = g.nextLawnCost; g.buyNextLawn(); }

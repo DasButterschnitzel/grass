@@ -204,14 +204,14 @@
       let html = `<div class="zs-title">${ZM.t('Sounds')}</div>`;
       for (const k of MIX_KEYS) {
         if (!has[k]) continue;
-        const v = m[k] === undefined ? 0.75 : m[k];
-        html += `<div class="mix-row"><span>${ZM.t(names[k])}</span><input type="range" min="0" max="1" step="0.01" value="${v}" data-k="${k}"></div>`;
+        html += `<div class="mix-row" data-k="${k}"><span>${ZM.t(names[k])}</span></div>`;
       }
       html += '<div id="zsExtra"></div>';
       el.innerHTML = html;
-      el.querySelectorAll('input[type=range]').forEach((r) => {
-        r.addEventListener('input', () => { m[r.dataset.k] = parseFloat(r.value); this.applyMix(); });
-        r.addEventListener('change', () => ZM.onSaveNeeded && ZM.onSaveNeeded());
+      el.querySelectorAll('.mix-row').forEach((row) => {
+        const k = row.dataset.k;
+        row.appendChild(ZM.slider(m[k] === undefined ? 0.75 : m[k], (v) => { m[k] = Math.round(v * 100) / 100; this.applyMix(); },
+          () => ZM.onSaveNeeded && ZM.onSaveNeeded()));
       });
       this.adFreeButton(el.querySelector('#zsExtra'));
     }

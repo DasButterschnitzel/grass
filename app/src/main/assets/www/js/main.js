@@ -4,15 +4,17 @@
   const KEY = 'zenmower.save.v1';
   const $ = (id) => document.getElementById(id);
 
-  const SAVE_VERSION = 2;
+  const SAVE_VERSION = 3;
   const defaults = () => ({
     v: SAVE_VERSION, cash: 0, gems: 0, level: 1,
-    upg: { blade: 0, engine: 0, fert: 0, sprinkler: 0, fleet: 0, bots: 0 },
+    upg: { blade: 0, engine: 0, fert: 0, sprinkler: 0, fleet: 0, auto: 0 },
     skin: 'classic', skins: ['classic'],
-    settings: { sfx: 0.9, music: 0.55, amb: 0.7, haptics: true, control: 'follow', quality: 'auto' },
-    stats: { totalEarned: 0, cells: 0, levels: 0, playTime: 0, zenTime: 0 },
-    rate: 0, lastSeen: Date.now(), field: null, boostT: 0,
-    tutorial: { move: false, fleet: false, lawn: false, regrow: false, zen: false, zenMode: false },
+    // vib: 0 off, 1 soft, 2 strong · melody: 'off' | 'soft' | 'full'
+    settings: { master: 1, sfx: 0.9, music: 0.55, amb: 0.7, melody: 'off', vib: 2, control: 'follow', quality: 'auto' },
+    stats: { totalEarned: 0, cells: 0, levels: 0, playTime: 0, zenTime: 0, rounds: 0 },
+    rate: 0, lastSeen: Date.now(), field: null, boostT: 0, autoReadyAt: 0,
+    daily: { last: '', streak: 0 },
+    tutorial: { move: false, fleet: false, lawn: false, regrow: false, zen: false, zenMode: false, buy: false, round: false, autoIntro: false, autoUse: false },
     ads: { lastInter: 0, levelsSince: 0 },
     zen: { scene: 'meadow', auto: false, breathe: false, mix: { grass: 0.75, wind: 0.75, water: 0.75, life: 0.75, music: 0.75 } },
     adFreeUntil: 0,
@@ -31,20 +33,44 @@
     return def;
   }
 
+  function migrateSettings(o) {
+    if (!o) return o;
+    const s = Object.assign({}, o);
+    if (s.vib === undefined) s.vib = s.haptics === false ? 0 : 2;
+    delete s.haptics;
+    return s;
+  }
+
+  // 1.1/1.2 -> 1.3: new economy (smaller upgrade caps), the permanent "bots" became the
+  // timed autopilot. Keep the lawn, gems, skins and settings; cap what no longer exists.
+  function migrate2(old) {
+    const s = merge(defaults(), Object.assign({}, old, { v: SAVE_VERSION, settings: migrateSettings(old.settings) }));
+    const u = old.upg || {};
+    s.upg = {
+      blade: Math.min(45, u.blade || 0), engine: Math.min(45, u.engine || 0), fert: u.fert || 0,
+      sprinkler: Math.min(40, u.sprinkler || 0), fleet: Math.min(3, u.fleet || 0), auto: Math.min(10, u.bots || 0),
+    };
+    s.cash = Math.min(s.cash, ZM.lawnCost(s.level) * 1.5);
+    s.tutorial.buy = true;
+    s.melodyNote = true; // tell them once that the melody is now optional
+    return s;
+  }
+
   function loadSave() {
     try {
       const raw = localStorage.getItem(KEY);
       if (raw) {
         const old = JSON.parse(raw);
-        if (!old.v || old.v < SAVE_VERSION) {
+        if (!old.v || old.v < 2) {
           // v1 used a completely different economy (clear-the-field levels). Keep what the
           // player bought with gems and their settings, restart the lawn progression.
-          const keep = { gems: old.gems, skins: old.skins, skin: old.skin, settings: old.settings, created: old.created,
+          const keep = { gems: old.gems, skins: old.skins, skin: old.skin, settings: migrateSettings(old.settings), created: old.created,
             tutorial: { move: !!(old.tutorial && old.tutorial.move), fleet: !!(old.tutorial && old.tutorial.fleet) } };
           const s = merge(defaults(), keep);
           s.field = null;
           return s;
         }
+        if (old.v < 3) return migrate2(old);
         return merge(defaults(), old);
       }
     } catch (e) { console.warn('save corrupt, starting fresh', e); }
@@ -135,10 +161,11 @@
 
     // ---------------------------------------------------------------- offline earnings
     const sessionStart = performance.now();
+    // a little income while you are away; the autopilot level makes it a bit better
     const idleIncome = (awaySec) => {
-      const bots = save.upg.bots || 0;
-      const factor = bots > 0 ? 0.08 + 0.025 * bots : 0.03;
-      const secs = Math.min(awaySec, (2 + bots * 0.4) * 3600);
+      const auto = save.upg.auto || 0;
+      const factor = 0.05 + 0.01 * auto;
+      const secs = Math.min(awaySec, (2 + auto * 0.3) * 3600);
       return { amount: Math.floor(save.rate * secs * factor), secs };
     };
     const checkOffline = (awaySec) => {
@@ -148,6 +175,14 @@
       if (amount >= 1 && !ui.modalOpen) ui.openOffline(amount, secs);
     };
     checkOffline((Date.now() - save.lastSeen) / 1000);
+    // daily gift: after any other dialog, never for a brand-new player in their first minute
+    const daily = () => { if (save.stats.playTime > 45 && !zen.on && !ui.modalOpen) ui.checkDaily(); };
+    ZM.onModalClosed = () => setTimeout(daily, 500);
+    setTimeout(daily, 900);
+    if (save.melodyNote) {
+      delete save.melodyNote;
+      setTimeout(() => ui.toast(ZM.t('melody_note'), 6), 2500);
+    }
     // back from the zen garden: the autopilot kept mowing your real lawn meanwhile
     ZM.onZenExit = (secs) => {
       if (secs < 90 || save.rate <= 0) return;
@@ -203,6 +238,7 @@
       if (ZM.audio) ZM.audio.resume();
       last = performance.now();
       checkOffline(away);
+      setTimeout(daily, 900);
     };
     ZM.Native.on('pause', onPause);
     ZM.Native.on('resume', onResume);

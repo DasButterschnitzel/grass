@@ -27,17 +27,20 @@
   </div>
 
   <div id="chips">
-    <div id="comboChip" class="chip hidden"><span id="comboText">COMBO ×1.1</span><div class="chip-bar"><div id="comboBar"></div></div></div>
+    <div id="roundPill" class="chip"><span id="roundTxt"></span><div class="chip-bar"><div id="roundFill"></div></div></div>
     <div id="frenzyChip" class="chip green hidden"><span id="frenzyText">FRENZY</span></div>
   </div>
 
   <div id="actions">
     <div class="act-left">
       <button id="btnZen" class="act-btn" aria-label="Zen mode"><span class="act-ico"></span><span class="act-lbl">Zen</span></button>
-      <button id="btnShop" class="act-btn" aria-label="Mower shop"><span class="act-ico"></span><span class="act-lbl">Shop</span></button>
+      <button id="btnShop" class="act-btn icon-only" aria-label="Mower shop"><span class="act-ico"></span></button>
       <button id="btnView" class="act-btn icon-only" aria-label="Minimal view"><span class="act-ico"></span></button>
     </div>
-    <button id="btnBoost" class="act-btn gold" aria-label="Double cash"><span class="act-ico"></span><span class="act-lbl" id="boostLbl">×2 Cash</span></button>
+    <div class="act-right">
+      <button id="btnAuto" class="act-btn auto" aria-label="Autopilot"><span class="act-ico"></span><span class="act-lbl" id="autoLbl">Auto</span></button>
+      <button id="btnBoost" class="act-btn gold" aria-label="Double cash"><span class="act-ico"></span><span class="act-lbl" id="boostLbl">×2</span></button>
+    </div>
   </div>
 
   <button id="viewExit" aria-label="Show buttons"></button>

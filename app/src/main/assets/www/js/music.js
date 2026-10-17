@@ -95,7 +95,7 @@
     this.chordSteps = 16; // eighths per chord (2 bars of 4/4)
     this.padVoices = [];
     this.mowLevel = 0; this.mowPan = 0; this.lastCutT = -10; this.goldT = -10;
-    this.comboLevel = 0; this.mowers = 1;
+    this.mowers = 1;
     this.mel = { deg: 4, notes: 0, len: 5, rest: 0, center: 4 };
     this.idleMel = { deg: 4 };
     this.musicStyle = { melody: 1, idle: 1, pad: 1, zen: false };
@@ -161,7 +161,9 @@
       this.startChord(this.chordIdx, t, this.chordSteps * this.clk.beat / 2);
     }
     const mowing = this.mowLevel > 0.06 && this.ctx.currentTime - this.lastCutT < 0.6;
-    if (mowing) this.mowNote(i, t);
+    // the melody while mowing is optional (settings): off by default – pure grass ASMR
+    const mel = this.musicStyle.zen ? (this.settings.melody === 'full' ? 'soft' : this.settings.melody) : this.settings.melody;
+    if (mowing) { if (mel === 'soft' || mel === 'full') this.mowNote(i, t, mel === 'soft'); }
     else {
       this.mel.rest = 0;
       if (i % 2 === 0 && this.ctx.currentTime - this.lastCutT > 1.5) this.idleNote(i, t);
@@ -186,11 +188,12 @@
     env.gain.setValueAtTime(lvl, t0 + dur);
     env.gain.linearRampToValueAtTime(0, end);
     filt.connect(env); env.connect(this.musicIn);
-    const s = ctx.createGain(); s.gain.value = 0.9; env.connect(s); s.connect(this.musicRev);
+    const s = ctx.createGain(); s.gain.value = 0.9; env.connect(s); s.connect(this.padWet);
     const oscs = [];
     const notes = k.voicing(ci);
     for (const m of notes) {
-      for (const [type, det, amp] of [['triangle', -6, 0.7], ['sine', 5, 0.6], ['sawtooth', 0, zen ? 0.06 : 0.12]]) {
+      // slight detune for warmth; unequal levels keep the beating a gentle shimmer, not a wobble
+      for (const [type, det, amp] of [['triangle', -4, 0.75], ['sine', 4, 0.45], ['sawtooth', 0, zen ? 0.06 : 0.12]]) {
         const o = ctx.createOscillator(); o.type = type;
         o.frequency.value = ZM.mtof(m); o.detune.value = det + rnd(-2, 2);
         const g = ctx.createGain(); g.gain.value = amp / notes.length;
@@ -225,14 +228,15 @@
   };
 
   // ------------------------------------------------------------ the melody you play by mowing
-  P.mowNote = function (i, t) {
+  P.mowNote = function (i, t, soft) {
     const M = this.mel, k = this.key, now = this.ctx.currentTime;
     const lvl = this.mowLevel, onBeat = i % 2 === 0;
+    if (soft && !onBeat) return; // "soft": quarter notes only
     if (M.rest > 0) { M.rest--; return; }
-    const p = (0.3 + 0.55 * lvl) * (onBeat ? 1.15 : 0.75) * this.musicStyle.melody;
+    const p = (0.3 + 0.55 * lvl) * (onBeat ? 1.15 : 0.75) * this.musicStyle.melody * (soft ? 0.5 : 1);
     if (Math.random() > p) return;
     // gentle random walk on the scale, pulled back towards the centre
-    const center = M.center + Math.min(3, Math.floor((this.comboLevel || 0) / 3));
+    const center = M.center;
     const r = Math.random();
     let step = r < 0.32 ? 1 : r < 0.64 ? -1 : r < 0.76 ? 2 : r < 0.88 ? -2 : r < 0.94 ? 0 : (Math.random() < 0.5 ? 3 : -3);
     if (M.deg > center + 3) step = -Math.abs(step) || -1;
@@ -247,34 +251,33 @@
       phraseEnd = true;
     }
     const gold = now - this.goldT < 1.6;
-    const vel = (0.13 + 0.1 * lvl) * (onBeat ? 1.1 : 0.9) * (phraseEnd ? 1.1 : 1) * (this.musicStyle.zen ? 0.8 : 1);
+    const vel = (0.11 + 0.08 * lvl) * (onBeat ? 1.1 : 0.9) * (phraseEnd ? 1.1 : 1) * (this.musicStyle.zen || soft ? 0.8 : 1);
     const when = t + rnd(0, 0.012);
     const pan = ZM.clamp(this.mowPan * 0.6 + rnd(-0.15, 0.15), -0.8, 0.8);
-    const m = k.note(M.deg, 1);
+    const m = k.note(M.deg, 1), bus = this.tonal;
     if (gold) {
-      this.tone(m, 'bell', { gain: vel * 0.75, when, pan, rev: 0.7 });
-      this.tone(m + 12, 'bell', { gain: vel * 0.25, when: when + 0.005, pan: -pan, rev: 0.9 });
+      this.tone(m, 'bell', { gain: vel * 0.75, when, pan, rev: 0.7, bus, prio: 0 });
     } else {
-      this.tone(m, 'pluck', { gain: vel, when, pan, rev: 0.55 });
+      this.tone(m, 'pluck', { gain: vel, when, pan, rev: 0.55, bus, prio: 0 });
     }
-    // two or more mowers: a second voice a pentatonic "third" below
-    if (this.mowers > 1 && Math.random() < 0.4 + 0.1 * this.mowers) {
-      this.tone(k.note(M.deg - 2, 1), 'pluck', { gain: vel * 0.5, when: when + 0.004, pan: -pan * 0.6, rev: 0.6 });
+    // "full": with several mowers a second voice a pentatonic "third" below
+    if (!soft && this.mowers > 1 && Math.random() < 0.3) {
+      this.tone(k.note(M.deg - 2, 1), 'pluck', { gain: vel * 0.45, when: when + 0.004, pan: -pan * 0.6, rev: 0.6, bus, prio: 0 });
     }
   };
 
   // sparse kalimba while you rest
   P.idleNote = function (i, t) {
     const s = this.soundscape || {};
-    const p = 0.24 * this.musicStyle.idle * (s.melody === undefined ? 1 : s.melody);
+    const p = 0.18 * this.musicStyle.idle * (s.melody === undefined ? 1 : s.melody);
     if (Math.random() > p) return;
     const k = this.key, M = this.idleMel;
     M.deg += [-2, -1, -1, 1, 1, 2][(Math.random() * 6) | 0];
     if (M.deg < 0) M.deg = 2; if (M.deg > 9) M.deg = 7;
     if (Math.random() < 0.35) M.deg = k.stableDeg(this.chordIdx, M.deg);
     const m = k.note(M.deg, 0);
-    this.tone(m, 'soft', { gain: rnd(0.14, 0.22) * (this.musicStyle.zen ? 0.85 : 1), when: t, rev: 0.85, pan: rnd(-0.4, 0.4), bus: this.musicIn });
-    if (Math.random() < 0.2) this.tone(k.note(M.deg + 2, 0), 'soft', { gain: 0.1, when: t + this.clk.beat * 0.5, rev: 0.85, bus: this.musicIn });
+    this.tone(m, 'soft', { gain: rnd(0.14, 0.22) * (this.musicStyle.zen ? 0.85 : 1), when: t, rev: 0.85, pan: rnd(-0.4, 0.4), bus: this.musicIn, prio: 0 });
+    if (Math.random() < 0.2) this.tone(k.note(M.deg + 2, 0), 'soft', { gain: 0.1, when: t + this.clk.beat * 0.5, rev: 0.85, bus: this.musicIn, prio: 0 });
   };
 
   // neon garden: soft arpeggio on sixteenths
@@ -293,7 +296,7 @@
     const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = ZM.mtof(m);
     const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1800; f.Q.value = 1.5;
     const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.03, t0 + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.2);
-    o.connect(f); f.connect(g); g.connect(this.tonal); const s = ctx.createGain(); s.gain.value = 0.6; g.connect(s); s.connect(this.musicRev);
+    o.connect(f); f.connect(g); g.connect(this.tonal); const s = ctx.createGain(); s.gain.value = 0.6; g.connect(s); s.connect(this.tonalWet);
     o.start(t0); o.stop(t0 + 0.22);
   };
 })(window.ZM);

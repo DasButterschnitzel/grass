@@ -20,9 +20,10 @@
       this.biome = null;
       this.muted = false;
       this.mix = { grass: 1, wind: 1, water: 1, life: 1, music: 1 };
-      this.lastPop = 0;
+      this.lastPop = 0; this.lastPopNote = 0;
       this.lastUpg = -1; this.upgRun = 0;
       this.live = [];
+      this.voices = [];
     }
 
     unlock() {
@@ -52,6 +53,7 @@
       lim.threshold.value = -2.5; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.002; lim.release.value = 0.12;
       this.master.connect(sub); sub.connect(shelf); shelf.connect(glue); glue.connect(lim); lim.connect(this.out); this.out.connect(ctx.destination);
 
+      // category buses (settings: effects / music / nature) …
       this.sfx = ctx.createGain(); this.sfx.connect(this.master);
       this.music = ctx.createGain(); this.music.connect(this.master);
       this.amb = ctx.createGain(); this.amb.connect(this.master);
@@ -59,14 +61,12 @@
       this.reverb.buffer = this.makeIR(3.4);
       this.revOut = ctx.createGain(); this.revOut.gain.value = 0.5;
       this.reverb.connect(this.revOut); this.revOut.connect(this.master);
-      this.sfxRev = ctx.createGain(); this.sfxRev.connect(this.reverb);
-      this.musicRev = ctx.createGain(); this.musicRev.connect(this.reverb);
-      this.ambRev = ctx.createGain(); this.ambRev.gain.value = 0.8; this.ambRev.connect(this.reverb);
 
-      // mixer layers (the zen mixer moves these; in the game they stay at 1)
+      // … and the channels inside them (the zen mixer moves these; in the game they stay at 1)
       this.grassGain = ctx.createGain(); this.grassGain.connect(this.sfx);
-      this.tonal = ctx.createGain(); this.tonal.connect(this.music); // melody, bells, chimes
-      this.musicIn = ctx.createGain(); this.musicIn.connect(this.music); // pads & bass
+      this.jingle = ctx.createGain(); this.jingle.connect(this.sfx);    // event sounds: gems, rounds …
+      this.tonal = ctx.createGain(); this.tonal.connect(this.music);    // the melody
+      this.musicIn = ctx.createGain(); this.musicIn.connect(this.music); // pads, bass, bowls
       this.windBus = ctx.createGain(); this.windBus.connect(this.amb);
       this.waterBus = ctx.createGain(); this.waterBus.connect(this.amb);
       this.lifeBus = ctx.createGain(); this.lifeBus.connect(this.amb);
@@ -76,7 +76,15 @@
       const grassHi = ctx.createBiquadFilter();
       grassHi.type = 'lowpass'; grassHi.frequency.value = 7600; grassHi.Q.value = 0.5;
       this.grassBus.connect(grassHi); grassHi.connect(this.grassGain);
-      const grassSend = ctx.createGain(); grassSend.gain.value = 0.1; grassHi.connect(grassSend); grassSend.connect(this.reverb);
+
+      // Every channel has a reverb send AFTER its volume, so turning a slider down also
+      // silences the echo of that channel (in 1.1 the reverb bypassed the sliders).
+      const wet = () => { const g = ctx.createGain(); g.connect(this.reverb); return g; };
+      this.sfxWet = wet(); this.jingleWet = wet(); this.grassWet = wet(); this.tonalWet = wet();
+      this.padWet = wet(); this.windWet = wet(); this.waterWet = wet(); this.lifeWet = wet();
+      const grassSend = ctx.createGain(); grassSend.gain.value = 0.1; grassHi.connect(grassSend); grassSend.connect(this.grassWet);
+      this.wetFor = new Map([[this.sfx, this.sfxWet], [this.jingle, this.jingleWet], [this.grassBus, this.grassWet], [this.tonal, this.tonalWet],
+        [this.musicIn, this.padWet], [this.windBus, this.windWet], [this.waterBus, this.waterWet], [this.lifeBus, this.lifeWet]]);
 
       this.buildBuffers();
       this.startLoops();
@@ -91,16 +99,18 @@
     applyVolumes() {
       if (!this.ctx) return;
       const s = this.settings, t = this.ctx.currentTime, x = this.mix;
+      const vol = (v, d) => (v === undefined ? d : v);
+      const sfx = vol(s.sfx, 0.9), mus = vol(s.music, 0.55) * 0.9, amb = vol(s.amb, 0.7);
+      const set = (node, v, tc) => node.gain.setTargetAtTime(v, t, tc || 0.05);
       this.out.gain.setTargetAtTime(this.muted || this.sleeping ? 0 : this.fade === undefined ? 1 : this.fade, t, 0.08);
-      this.sfx.gain.setTargetAtTime(s.sfx, t, 0.05);
-      this.music.gain.setTargetAtTime(s.music * 0.9, t, 0.2);
-      this.amb.gain.setTargetAtTime(s.amb, t, 0.2);
-      this.grassGain.gain.setTargetAtTime(x.grass, t, 0.1);
-      this.tonal.gain.setTargetAtTime(x.music, t, 0.1);
-      this.musicIn.gain.setTargetAtTime(x.music, t, 0.2);
-      this.windBus.gain.setTargetAtTime(x.wind, t, 0.2);
-      this.waterBus.gain.setTargetAtTime(x.water, t, 0.2);
-      this.lifeBus.gain.setTargetAtTime(x.life, t, 0.2);
+      set(this.master, 0.9 * vol(s.master, 1));
+      set(this.sfx, sfx); set(this.music, mus); set(this.amb, amb);
+      set(this.grassGain, x.grass); set(this.tonal, x.music); set(this.musicIn, x.music);
+      set(this.windBus, x.wind); set(this.waterBus, x.water); set(this.lifeBus, x.life);
+      // post-fader reverb sends
+      set(this.sfxWet, sfx); set(this.jingleWet, sfx); set(this.grassWet, sfx * x.grass);
+      set(this.tonalWet, mus * x.music); set(this.padWet, mus * x.music);
+      set(this.windWet, amb * x.wind * 0.8); set(this.waterWet, amb * x.water * 0.8); set(this.lifeWet, amb * x.life * 0.8);
     }
     setMuted(v) { this.muted = v; this.applyVolumes(); }
     setMix(m) { Object.assign(this.mix, m); this.applyVolumes(); }
@@ -308,8 +318,9 @@
         const p = ctx.createStereoPanner(); p.pan.value = ZM.clamp(o.pan, -1, 1);
         g.connect(p); out = p;
       }
-      out.connect(o.bus || this.sfx);
-      if (o.rev) { const s = ctx.createGain(); s.gain.value = o.rev; out.connect(s); s.connect(o.revBus || this.sfxRev); }
+      const bus = o.bus || this.sfx;
+      out.connect(bus);
+      if (o.rev) { const s = ctx.createGain(); s.gain.value = o.rev; out.connect(s); s.connect(this.wetFor.get(bus) || this.sfxWet); }
       const when = Math.max(o.when || 0, ctx.currentTime);
       src.start(when, o.offset || 0);
       if (o.dur) src.stop(when + o.dur);
@@ -322,14 +333,21 @@
       if (g) this.live.push({ g, t });
     }
 
-    // Play an instrument at a MIDI pitch. inst: 'pluck' | 'soft' | 'bell' | 'chime' | 'bowl'
+    // Play an instrument at a MIDI pitch. inst: 'pluck' | 'soft' | 'bell' | 'chime' | 'bowl'.
+    // Low-priority notes (prio 0: the melody) are dropped while 6 notes already ring.
     tone(midi, inst, opts) {
       const base = { pluck: [this.pluckBuf, 72], soft: [this.softPluck, 60], bell: [this.bellBuf, 84], chime: [this.chimeBuf, 84], bowl: [this.bowlBuf, 60] }[inst || 'pluck'];
-      if (!base || !base[0]) return null;
-      const o = Object.assign({ bus: this.tonal, revBus: this.musicRev }, opts);
+      if (!base || !base[0] || !this.ctx) return null;
+      const o = Object.assign({ bus: this.jingle }, opts);
       o.rate = Math.pow(2, (midi - base[1]) / 12);
+      const now = this.ctx.currentTime, when = Math.max(o.when || 0, now);
+      this.voices = this.voices.filter((v) => v > now);
+      if ((o.prio === undefined ? 1 : o.prio) < 1 && this.voices.length >= 6) return null;
       const src = this.play(base[0], o);
-      if (src) this.track(src.gainNode, o.when || this.ctx.currentTime);
+      if (src) {
+        this.track(src.gainNode, when);
+        this.voices.push(when + Math.min(2.5, base[0].duration / o.rate));
+      }
       return src;
     }
 
@@ -368,11 +386,13 @@
       const lvl = Math.min(1, this.rate / 110);
       this.mowLevel += (lvl - this.mowLevel) * (1 - Math.exp(-dt * (lvl > this.mowLevel ? 6 : 1.5)));
       if (n > 0) { this.lastCutT = now; this.mowPan += (pan - this.mowPan) * Math.min(1, dt * 4); }
-      const target = Math.min(1, this.rate / 160) * 0.5;
+      const target = Math.min(1, this.rate / 160) * 0.42;
       this.rustleGain.gain.setTargetAtTime(target, now, target > 0.01 ? 0.04 : 0.12);
       if (this.rustlePan.pan) this.rustlePan.pan.setTargetAtTime(pan * 0.6, now, 0.1);
       if (n <= 0) return;
-      const gps = Math.min(70, 10 + this.rate * 0.45);
+      // more mowers → a denser, richer crunch, but not a louder one
+      const gps = Math.min(48, 9 + this.rate * 0.35);
+      const norm = Math.sqrt(22 / Math.max(22, gps));
       this.grainBudget = Math.min(6, this.grainBudget + gps * dt);
       while (this.grainBudget >= 1) {
         this.grainBudget -= 1;
@@ -383,7 +403,7 @@
         else if (r < 0.75) { set = this.rustles; gain = rnd(0.2, 0.42); }
         else { set = this.crunches; gain = rnd(0.25, 0.5) * (0.6 + th * 0.6); }
         this.play(set[(Math.random() * set.length) | 0], {
-          bus: this.grassBus, gain: gain * 0.9, rate: rnd(0.85, 1.28) - th * 0.12, pan: pan * 0.7 + rnd(-0.25, 0.25), when: now + Math.random() * 0.03,
+          bus: this.grassBus, gain: gain * 0.9 * norm, rate: rnd(0.85, 1.28) - th * 0.12, pan: pan * 0.7 + rnd(-0.25, 0.25), when: now + Math.random() * 0.03,
         });
       }
     }
@@ -400,14 +420,48 @@
 
     // ------------------------------------------------------------ event sounds (all in key)
     goldCut() { if (this.ctx) this.goldT = this.ctx.currentTime; }
-    setCombo(level) { this.comboLevel = level; }
 
-    combo(level) {
-      if (!this.ok() || level % 5 !== 0) return;
-      const t = this.quant(2), k = this.key;
-      const top = k.stableDeg(this.chordIdx, 7 + Math.min(3, level / 5));
-      this.tone(k.note(top, 1), 'bell', { gain: 0.07, when: t, rev: 0.8, pan: -0.2 });
-      this.tone(k.note(top + 5, 1), 'bell', { gain: 0.045, when: t + 0.01, rev: 0.9, pan: 0.2 });
+    // a quarter of the round done: one soft bell, a step higher each time – you hear the lawn
+    // getting done without a single extra note while you mow
+    progressNote(step) {
+      if (!this.ok()) return;
+      const k = this.key, t = this.quant(2);
+      this.tone(k.note(k.stableDeg(this.chordIdx, 3 + step * 2), 0), 'bell', { gain: 0.06 + step * 0.008, when: t, rev: 0.8, pan: -0.25 + step * 0.12 });
+    }
+
+    // round complete: rising arpeggio, a warm low note and a soft whoosh
+    roundComplete(big) {
+      if (!this.ok()) return;
+      const t = this.quant(4), k = this.key, step = this.clk.beat / 4;
+      const n = big ? 7 : 4, top = k.stableDeg(this.chordIdx, 10);
+      for (let i = 0; i < n; i++) this.tone(k.note(top - (n - 1 - i) * 1, 1), i % 2 ? 'bell' : 'pluck', { gain: 0.14, when: t + i * step * 0.6, rev: 0.7, pan: -0.5 + i * (1 / n) });
+      if (big) {
+        this.tone(k.root - 12, 'soft', { gain: 0.26, when: t, rev: 0.6 });
+        this.whoosh(t, 0.22, 400, 4000);
+      }
+    }
+
+    autoStart() {
+      if (!this.ok()) return;
+      const t = this.quant(4), k = this.key, step = this.clk.beat / 4, d0 = k.stableDeg(this.chordIdx, 5);
+      this.whoosh(this.ctx.currentTime, 0.2, 300, 3000);
+      [0, 2, 4].forEach((d, i) => this.tone(k.note(d0 + d, 1), 'pluck', { gain: 0.13, when: t + i * step * 0.5, rev: 0.6 }));
+    }
+
+    autoEnd() {
+      if (!this.ok()) return;
+      const t = this.quant(4), k = this.key, d0 = k.stableDeg(this.chordIdx, 6);
+      [0, -2].forEach((d, i) => this.tone(k.note(d0 + d, 1), 'pluck', { gain: 0.09, when: t + i * this.clk.beat / 2, rev: 0.6 }));
+    }
+
+    whoosh(t0, gain, f0, f1) {
+      const ctx = this.ctx;
+      const src = ctx.createBufferSource(); src.buffer = this.white;
+      const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 1.2;
+      f.frequency.setValueAtTime(f0, t0); f.frequency.exponentialRampToValueAtTime(f1, t0 + 0.6);
+      const g = ctx.createGain(); g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(gain, t0 + 0.3); g.gain.linearRampToValueAtTime(0, t0 + 0.8);
+      src.connect(f); f.connect(g); g.connect(this.sfx); const s = ctx.createGain(); s.gain.value = 0.5; g.connect(s); s.connect(this.sfxWet);
+      src.start(t0); src.stop(t0 + 0.85);
     }
 
     gem() {
@@ -432,7 +486,7 @@
       if (!this.ok()) return;
       const t = this.quant(4), k = this.key, step = this.clk.beat / 4;
       const top = k.stableDeg(this.chordIdx, 11);
-      for (let i = 0; i < 3; i++) this.tone(k.note(top - i * 2, 1), 'bell', { gain: 0.045, when: t + i * step, rev: 1, pan: rnd(-0.5, 0.5) });
+      for (let i = 0; i < 2; i++) this.tone(k.note(top - i * 2, 1), 'bell', { gain: 0.045, when: t + i * step, rev: 1, pan: rnd(-0.5, 0.5) });
     }
 
     frenzy() {
@@ -442,7 +496,7 @@
       f.frequency.setValueAtTime(300, now); f.frequency.exponentialRampToValueAtTime(5000, now + 0.7);
       const src = ctx.createBufferSource(); src.buffer = this.white;
       const g = ctx.createGain(); g.gain.setValueAtTime(0, now); g.gain.linearRampToValueAtTime(0.3, now + 0.5); g.gain.linearRampToValueAtTime(0, now + 0.85);
-      src.connect(f); f.connect(g); g.connect(this.sfx); const s = ctx.createGain(); s.gain.value = 0.5; g.connect(s); s.connect(this.sfxRev);
+      src.connect(f); f.connect(g); g.connect(this.sfx); const s = ctx.createGain(); s.gain.value = 0.5; g.connect(s); s.connect(this.sfxWet);
       src.start(now); src.stop(now + 0.9);
       const t = this.quant(4), k = this.key, step = this.clk.beat / 4, d0 = k.stableDeg(this.chordIdx, 3);
       for (let i = 0; i < 6; i++) this.tone(k.note(d0 + i, 1), i % 2 ? 'bell' : 'pluck', { gain: 0.14, when: t + i * step * 0.5, rev: 0.7, pan: -0.5 + i * 0.2 });
@@ -455,8 +509,10 @@
       if (now - this.lastPop < 0.16) return;
       this.lastPop = now;
       this.play(this.crunches[(Math.random() * this.crunches.length) | 0], { bus: this.grassBus, gain: 0.25, rate: 1.7 });
+      if (now - this.lastPopNote < 5) return; // a bed of flowers must not turn into a xylophone
+      this.lastPopNote = now;
       const k = this.key;
-      this.tone(k.note(9 + ((Math.random() * 5) | 0), 1), 'pluck', { gain: 0.05, when: now + 0.01, rev: 0.6, pan: rnd(-0.4, 0.4) });
+      this.tone(k.note(9 + ((Math.random() * 5) | 0), 1), 'pluck', { gain: 0.045, when: now + 0.01, rev: 0.6, pan: rnd(-0.4, 0.4) });
     }
 
     sweep() { this.sprout(); }
@@ -468,7 +524,7 @@
         this.tone(k.note(i, 0) + 12, 'pluck', { gain: 0.22 - i * 0.008, when: t + i * step * 0.55, rev: 0.7, pan: (i / 10) * 1.2 - 0.6 });
       }
       this.tone(k.note(10, 0) + 12, 'bell', { gain: 0.14, when: t + 11 * step * 0.55, rev: 1 });
-      this.tone(k.root - 12, 'soft', { gain: 0.3, when: t, bus: this.musicIn, rev: 0.6 });
+      this.tone(k.root - 12, 'soft', { gain: 0.3, when: t, rev: 0.6 });
     }
 
     sprout() {

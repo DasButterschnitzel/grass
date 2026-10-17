@@ -1,7 +1,8 @@
 'use strict';
-// Game simulation: mowers, multitouch steering, cutting, regrowth, combos, golden patches,
-// gems, lucky clovers, autopilot and buying the next lawn. In zen mode the same lawn runs
-// without any economy: every finger gets its own mower and the autopilot mows stripes.
+// Game simulation: mowers, multitouch steering, cutting, regrowth, rounds ("lawn complete"),
+// golden patches, gems, lucky clovers, the timed autopilot bonus and buying the next lawn.
+// Extra mowers follow the one you steer in a V formation – or take a finger of their own.
+// In zen mode the same lawn runs without any economy: every finger gets its own mower.
 (function (ZM) {
   const PF = ZM.PF;
   const WHITE = [1, 1, 1];
@@ -21,6 +22,11 @@
     }
   }
 
+  // V formation behind the leader, in blade radii: (sideways, backwards)
+  const SLOTS = [[-1.6, 0.9], [1.6, 0.9], [-3.2, 1.8]];
+  const ROUND_DONE = 0.98;   // share of the lawn that counts as "mowed everything"
+  const HAPTIC_STEP = 3.5;   // grass layers cut per vibration tick
+
   class Game {
     constructor(save, hooks) {
       this.save = save;
@@ -39,8 +45,12 @@
       this.cam = { scale: 10, offX: 0, offY: 0 };
       this.grow = 1;
       this.hint = 0;
-      this.combo = { count: 0, timer: 0, level: 0 };
       this.frenzyT = 0;
+      this.autoT = 0;
+      this.autoAll = false; // QA hook: let the autopilot steer all the time
+      this.rounds = 0; this.roundEarned = 0; this.roundStep = 0; this.roundStart = 0;
+      this.hintT = 0; this.hintSpots = [];
+      this.hapAcc = 0; this.lastHap = 0;
       this.state = 'play';
       this.events = [];
       this.cutRate = 0;
@@ -68,7 +78,9 @@
       const want = this.stats.mowers;
       if (this.field) {
         while (this.mowers.length < want) {
-          const m = new Mower(this.mowers.length, this.level.W / 2 + (Math.random() - 0.5) * 6, this.level.H * 0.6);
+          const lead = this.mowers[0];
+          const x = lead ? lead.x : this.level.W / 2, y = lead ? lead.y + 2 : this.level.H * 0.6;
+          const m = new Mower(this.mowers.length, ZM.clamp(x + (Math.random() - 0.5) * 4, 0.5, this.level.W - 0.5), ZM.clamp(y, 0.5, this.level.H - 0.5));
           m.spawnT = 1;
           this.mowers.push(m);
           this.burst(m.x, m.y, 'spark', 18, [1, 1, 0.8], 7, PF.ADD);
@@ -94,6 +106,7 @@
       this.grow = restore ? 1 : 0;
       this.patch = null;
       this.frenzyT = 0;
+      this.rounds = 0; this.roundEarned = 0; this.roundStep = 0; this.roundStart = this.time; this.hintSpots = [];
       const t = this.time;
       this.nextGold = t + ZM.rand(8, 16);
       this.nextGem = t + ZM.rand(35, 60);
@@ -126,7 +139,7 @@
       this.state = 'growing';
       this.grow = 0;
       this.patch = null; this.frenzyT = 0; this.gemCell = -1; this.cloverCell = -1;
-      this.combo.count = 0; this.combo.level = 0; this.combo.timer = 0;
+      this.autoT = 0; this.hintSpots = [];
       this.placeMowers();
       this.buildDecor();
       this.particles.clear();
@@ -157,6 +170,20 @@
       if (this.audio) this.audio.levelClear();
       ZM.Native.haptic('success');
       this.emit('newLawn', { N: lv.N, biome: this.biome });
+      return true;
+    }
+
+    // ---------------------------------------------------------------- autopilot (timed bonus)
+    get autoReadyIn() { return Math.max(0, ((this.save.autoReadyAt || 0) - Date.now()) / 1000); }
+    activateAuto(free) {
+      if (this.mode === 'zen' || this.autoT > 0 || (!free && this.autoReadyIn > 0)) return false;
+      const dur = this.stats.autoDur;
+      this.autoT = dur;
+      this.save.autoReadyAt = Date.now() + (dur + ZM.AUTO_COOLDOWN) * 1000;
+      for (const m of this.mowers) { m.botBlock = -1; this.burst(m.x, m.y, 'spark', 14, [0.6, 1, 1], 7, PF.ADD); }
+      if (this.audio) this.audio.autoStart();
+      ZM.Native.haptic('medium');
+      this.emit('auto', dur);
       return true;
     }
 
@@ -328,20 +355,13 @@
       const zen = this.mode === 'zen';
       if (!zen && this.save.boostT > 0) this.save.boostT = Math.max(0, this.save.boostT - dt);
       if (this.frenzyT > 0) { this.frenzyT -= dt; if (this.frenzyT <= 0) this.emit('frenzyEnd'); }
-      if (this.combo.timer > 0) {
-        this.combo.timer -= dt;
-        if (this.combo.timer <= 0) {
-          this.combo.count = 0; if (this.combo.level > 0) this.emit('comboEnd', this.combo.level); this.combo.level = 0;
-          if (this.audio) this.audio.setCombo(0);
-        }
-      }
+      if (this.autoT > 0) { this.autoT = Math.max(0, this.autoT - dt); if (this.autoT <= 0) { this.emit('autoEnd'); if (this.audio) this.audio.autoEnd(); } }
 
       const st = this.stats;
       const frenzy = this.frenzyT > 0;
       const R = st.radius * (frenzy ? 1.5 : 1);
-      const comboMult = 1 + 0.1 * Math.min(10, this.combo.level);
-      const valueBase = zen ? 0 : lv.value * st.valueMult * comboMult * (this.save.boostT > 0 ? 2 : 1) * (frenzy ? 2 : 1);
-      let cutsFrame = 0, thickSum = 0, panSum = 0, speedSum = 0;
+      const valueBase = zen ? 0 : lv.value * st.valueMult * (this.save.boostT > 0 ? 2 : 1) * (frenzy ? 2 : 1);
+      let cutsFrame = 0, thickSum = 0, panSum = 0, speedSum = 0, heightSum = 0;
 
       for (const m of this.mowers) {
         this.moveMower(m, dt);
@@ -353,34 +373,30 @@
           cutsFrame += res;
           if (res > 0) panSum += ((m.x / lv.W) * 2 - 1) * res;
           thickSum += m._thick || 0;
+          if (m.pointer !== null) heightSum += m._cutH || 0; // only what is under your finger
         }
         if (zen) continue;
-        // floating earnings
+        // floating earnings: one number per mower now and then – not a blizzard of digits
         m.earnTimer -= dt;
-        // show a number every ~0.35 s, but don't spam tiny trims of regrowing grass
-        const minShow = lv.value * st.valueMult * 2.5;
-        if (m.earnTimer <= 0 && m.earnAcc > 0 && (m.earnAcc >= minShow || m.earnTimer < -1.5)) {
+        const minShow = lv.value * st.valueMult * 4;
+        if (m.earnTimer <= 0 && m.earnAcc > 0 && (m.earnAcc >= minShow || m.earnTimer < -2)) {
           m.textSide = -(m.textSide || 1);
           if (!this.minimalView) this.addText('+' + ZM.fmt(m.earnAcc), m.x + m.textSide * R * ZM.rand(0.25, 0.6), m.y - R * 0.5, m.goldAcc ? GOLD : WHITE);
-          m.earnAcc = 0; m.goldAcc = false; m.earnTimer = 0.36;
+          m.earnAcc = 0; m.goldAcc = false; m.earnTimer = this.mowers.length > 2 ? 0.9 : 0.6;
         }
       }
       this.separateMowers();
       if (zen) this.updateZenMowers(dt);
 
-      if (cutsFrame > 0 && zen) this.sessionCuts += cutsFrame;
-      else if (cutsFrame > 0) {
-        this.combo.timer = 0.9;
-        this.combo.count += cutsFrame;
-        const newLevel = Math.floor(this.combo.count / 140);
-        if (newLevel > this.combo.level) {
-          this.combo.level = newLevel;
-          if (newLevel <= 10) this.emit('combo', newLevel);
-          if (this.audio) { this.audio.setCombo(newLevel); this.audio.combo(newLevel); }
-        }
+      if (cutsFrame > 0) {
         this.sessionCuts += cutsFrame;
-        this.save.stats.cells += cutsFrame;
+        if (!zen) this.save.stats.cells += cutsFrame;
+        // feel the grass: a light tick every few layers cut by a mower you steer (never while
+        // the autopilot or the zen "watching" mode drives – the phone may be lying on a pillow)
+        this.hapAcc += heightSum;
+        if (this.hapAcc >= HAPTIC_STEP && t - this.lastHap > 0.075) { this.hapAcc = 0; this.lastHap = t; ZM.Native.haptic('tick'); }
       }
+      if (!zen) this.updateRound(dt);
       this.cutRate = this.cutRate * Math.exp(-dt * 6) + cutsFrame * (1 - Math.exp(-dt * 6)) / Math.max(dt, 1e-3);
       if (this.audio) {
         this.audio.cut(cutsFrame, cutsFrame > 0 ? thickSum / Math.max(1, this.mowers.length) : 0, cutsFrame > 0 ? panSum / cutsFrame : 0, dt);
@@ -412,9 +428,13 @@
       let hasT = m.pointer !== null && m.hasTarget;
       if (this.mode === 'zen') {
         if (!hasT && this.zenAuto) { hasT = this.laneTarget(m); maxSpd *= 0.62; }
-      } else if (!hasT && (this.autoAll || st.botFrac > 0)) {
+      } else if (!hasT && (this.autoT > 0 || this.autoAll)) {
+        // autopilot bonus: every mower picks its own patch of tall grass, a little faster
         hasT = this.botTarget(m);
-        maxSpd *= this.autoAll ? 1 : st.botFrac;
+        if (this.autoT > 0) maxSpd *= 1.25;
+      } else if (!hasT && m !== this.leader()) {
+        hasT = this.formationTarget(m);
+        maxSpd *= 1.3; // followers can catch up
       }
       let dvx = 0, dvy = 0;
       if (hasT) {
@@ -437,6 +457,25 @@
         while (da < -Math.PI) da += ZM.TAU;
         m.angle += da * (1 - Math.exp(-dt * 10));
       }
+    }
+
+    // the mower the player is steering (or the first one)
+    leader() {
+      for (const m of this.mowers) if (m.pointer !== null) return m;
+      return this.mowers[0];
+    }
+
+    formationTarget(m) {
+      const L = this.leader();
+      if (!L) return false;
+      let k = 0;
+      for (const o of this.mowers) { if (o === m) break; if (o !== L && o.pointer === null) k++; }
+      const slot = SLOTS[Math.min(k, SLOTS.length - 1)];
+      const R = this.stats.radius, a = L.angle;
+      const fx = Math.sin(a), fy = -Math.cos(a), rx = Math.cos(a), ry = Math.sin(a);
+      m.tx = ZM.clamp(L.x + rx * slot[0] * R - fx * slot[1] * R, 0.5, this.level.W - 0.5);
+      m.ty = ZM.clamp(L.y + ry * slot[0] * R - fy * slot[1] * R, 0.5, this.level.H - 0.5);
+      return true;
     }
 
     separateMowers() {
@@ -493,7 +532,8 @@
       const hx = Math.sin(m.angle), hy = -Math.cos(m.angle);
       const hh = f.h, grass = f.grass, type = f.type, maxH = f.maxH;
       const cutMin = ZM.CUT_MIN;
-      let cuts = 0, thick = 0, budget = 6;
+      let cuts = 0, thick = 0, budget = 6, newly = 0;
+      const pass = f.pass;
       const blades = this.biome.blades;
       for (let cy = y0; cy <= y1; cy++) {
         const dy = cy + 0.5 - m.y, dy2 = dy * dy;
@@ -505,9 +545,10 @@
           if (dx * dx + dy2 > R2) continue;
           const typ = type[i];
           const bloom = typ === 2 && hh[i] >= maxH[i] * 0.85;
+          if (!pass[i]) newly++;
           const h = f.cut(i, hx, hy);
           const v = valueBase * h * (typ === 1 ? ZM.GOLD_MULT : bloom ? 3 : 1);
-          if (v > 0) { m.earnAcc += v; this.earn(v); }
+          if (v > 0) { m.earnAcc += v; this.earn(v); this.roundEarned += v; }
           cuts++;
           thick += h;
           if (budget > 0 && Math.random() < 0.55) {
@@ -526,7 +567,67 @@
         }
       }
       m._thick = cuts > 0 ? thick / cuts : 0;
+      m._cutH = thick;
+      m._newly = newly;
       return cuts;
+    }
+
+    // ---------------------------------------------------------------- rounds
+    // Mow every part of the lawn once → "lawn complete!": a bonus of half of what the round
+    // earned, confetti, a fanfare. The grass keeps growing back, so the next round starts at once.
+    get roundProgress() { const f = this.field; return f ? f.passCount / Math.max(1, f.passTotal) : 0; }
+
+    updateRound(dt) {
+      const p = this.roundProgress;
+      const step = Math.min(3, Math.floor(p * 4)); // a soft bell at 25 / 50 / 75 %
+      if (step > this.roundStep) {
+        this.roundStep = step;
+        if (this.audio) this.audio.progressNote(step);
+      }
+      if (p >= ROUND_DONE) this.completeRound();
+      // the last few spots get a little arrow so nobody has to hunt for them
+      this.hintT -= dt;
+      if (this.hintT <= 0) { this.hintT = 0.5; this.hintSpots = p >= 0.85 ? this.findRemaining(6) : []; }
+    }
+
+    findRemaining(max) {
+      const f = this.field, W = f.W, BS = 4, BW = Math.ceil(W / BS);
+      const counts = new Map();
+      for (const i of f.cells) {
+        if (f.pass[i]) continue;
+        const b = (((i / W) | 0) / BS | 0) * BW + ((i % W) / BS | 0);
+        const c = counts.get(b);
+        if (c) { c.n++; c.x += (i % W) + 0.5; c.y += ((i / W) | 0) + 0.5; } else counts.set(b, { n: 1, x: (i % W) + 0.5, y: ((i / W) | 0) + 0.5 });
+      }
+      const L = this.leader();
+      const spots = [];
+      counts.forEach((c) => spots.push({ x: c.x / c.n, y: c.y / c.n, n: c.n, d: L ? Math.hypot(c.x / c.n - L.x, c.y / c.n - L.y) : 0 }));
+      spots.sort((a, b) => a.d - b.d);
+      return spots.slice(0, max);
+    }
+
+    completeRound() {
+      const f = this.field, lv = this.level;
+      const secs = this.time - this.roundStart;
+      const bonus = this.roundEarned * ZM.ROUND_BONUS;
+      this.rounds++;
+      this.earn(bonus);
+      f.resetPass();
+      this.roundEarned = 0; this.roundStep = 0; this.roundStart = this.time; this.hintSpots = [];
+      const big = secs > 20;
+      const L = this.leader() || { x: lv.W / 2, y: lv.H / 2 };
+      if (big) {
+        for (let k = 0; k < 90; k++) {
+          const x = ZM.rand(0, lv.W), y = ZM.rand(-2, lv.H * 0.25);
+          const c = ZM.hueShift([1, 0.35, 0.4], ZM.rand(0, 360));
+          this.particles.spawn(5, x, y, ZM.rand(-3, 3), ZM.rand(2, 8), ZM.rand(1.6, 2.8), 1.0, 0.9, Math.random() * 6, ZM.rand(-8, 8), c, 1, PF.GRAV | PF.FLUTTER, 1.2);
+        }
+      }
+      // a long round gets the big banner (ui.js); a quick one a floating line at the mower
+      if (!big) this.addText(ZM.t('LAWN COMPLETE!') + ' +' + ZM.fmt(bonus), L.x, L.y - 4, GOLD, 1.1);
+      if (this.audio) this.audio.roundComplete(big);
+      ZM.Native.haptic(big ? 'success' : 'medium');
+      this.emit('round', { n: this.rounds, bonus, big });
     }
 
     earn(v) {
@@ -793,6 +894,15 @@
         ab.push(p.x, p.y, (p.r * 2 + 3) * (0.9 + 0.1 * pulse), (p.r * 2 + 3) * (0.9 + 0.1 * pulse), 0, S.glow, this.biome.gold[0], this.biome.gold[1], this.biome.gold[2], 0.35 * pulse);
       }
 
+      // last unmowed spots of this round
+      // (sized in screen pixels so they stay easy to spot on the big lawns)
+      for (const s of this.hintSpots) {
+        const ar = Math.max(1.6, 26 * px), gl = Math.max(3.2, 52 * px), pulse = Math.sin(t * 5 + s.x);
+        ab.push(s.x, s.y, gl, gl, 0, S.glow, 1, 0.92, 0.5, 0.3 + 0.12 * pulse);
+        nb.push(s.x, s.y, gl * (0.7 + 0.08 * pulse), gl * (0.7 + 0.08 * pulse), 0, S.ring, 1, 0.95, 0.6, 0.55);
+        nb.push(s.x, s.y - ar * 1.3 + pulse * ar * 0.25, ar, ar, Math.PI, S.arrow, 1, 0.9, 0.35, 0.95);
+      }
+
       // mowers
       const frenzy = this.frenzyT > 0;
       const R = this.stats.radius * (frenzy ? 1.5 : 1);
@@ -802,7 +912,7 @@
         if (pop <= 0.01) continue;
         const size = Math.max(Math.min(R * 1.3, 7), 40 * px) * pop;
         nb.push(m.x + 0.5, m.y + 0.8, size * 1.1, size * 1.1, 0, S.shadow, 1, 1, 1, 0.55);
-        const discC = frenzy ? ZM.hueShift([1, 0.4, 0.4], (t * 240) % 360) : [1, 1, 1];
+        const discC = frenzy ? ZM.hueShift([1, 0.4, 0.4], (t * 240) % 360) : this.autoT > 0 ? [0.55, 1, 1] : [1, 1, 1];
         nb.push(m.x, m.y, R * 2 * pop, R * 2 * pop, m.disc, S.disc, discC[0], discC[1], discC[2], 0.55);
         const ringA = (m.pointer !== null ? 0.75 : 0.45) * (this.mode === 'zen' ? 0.6 : 1);
         nb.push(m.x, m.y, R * 2.04 * pop, R * 2.04 * pop, 0, S.ring, 1, 1, 1, ringA);

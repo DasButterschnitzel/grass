@@ -16,10 +16,16 @@
   ZM.Native = {
     isNative: !!A,
     on,
+    // kind: tick | light | medium | heavy | success; strength from the settings (0 off, 1 soft, 2 strong)
     haptic(kind) {
-      if (!ZM.save || !ZM.save.settings.haptics) return;
-      if (A) call('haptic', kind);
-      else if (navigator.vibrate) { try { navigator.vibrate(kind === 'heavy' ? 30 : kind === 'success' ? [12, 40, 18] : 10); } catch (e) { /* ignore */ } }
+      const lvl = ZM.save ? ZM.save.settings.vib : 2;
+      if (!lvl) return;
+      if (A) { call('haptic', kind, lvl); return; }
+      if (navigator.vibrate) {
+        const k = lvl > 1 ? 1 : 0.6;
+        const ms = { tick: 9, light: 14, medium: 24, heavy: 40 }[kind];
+        try { navigator.vibrate(kind === 'success' ? [14, 50, 18, 50, 30] : Math.round((ms || 12) * k)); } catch (e) { /* ignore */ }
+      }
     },
     isRewardedReady() { return A ? !!call('isRewardedReady') : true; },
     isInterstitialReady() { return A ? !!call('isInterstitialReady') : false; },

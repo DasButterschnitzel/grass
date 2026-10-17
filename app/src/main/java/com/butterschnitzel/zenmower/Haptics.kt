@@ -1,9 +1,10 @@
 package com.butterschnitzel.zenmower
 
-import android.annotation.SuppressLint
 import android.content.Context
+import android.media.AudioAttributes
 import android.os.Build
 import android.os.SystemClock
+import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -11,21 +12,26 @@ import android.util.Log
 import androidx.annotation.RequiresApi
 
 /**
- * Short, game-style haptic feedback. Thread-safe and never throws: devices without a vibrator
- * (or with vibration restricted) simply get nothing.
+ * Game haptics: a light tick while grass is being cut plus stronger pulses for events.
+ * Thread-safe and never throws: devices without a vibrator simply get nothing.
  *
- * - API 29+: predefined effects (TICK / CLICK / HEAVY_CLICK), one-shot + waveform for heavy/success
- * - API 26-28: one-shot / waveform with amplitudes
- * - API 24-25: legacy duration / pattern vibration
+ * Everything uses explicit one-shot / waveform effects (the predefined CLICK/TICK effects are
+ * barely noticeable or silent on many phones) and is tagged as media/game vibration, so it
+ * follows the "media vibration" setting instead of the often disabled touch feedback.
+ *
+ * Phones without amplitude control usually have an eccentric-mass motor that needs ~20 ms
+ * just to spin up, so they get longer pulses (`motorMs`) instead of the crisp short ones.
+ *
+ * `level`: 0 = off, 1 = soft, 2 = strong.
  */
 internal class Haptics(context: Context) {
 
-    private enum class Kind(val durationMs: Long, val amplitude: Int) {
-        TICK(8, 60),
-        LIGHT(12, 100),
-        MEDIUM(20, 170),
-        HEAVY(35, 255),
-        SUCCESS(0, 0),
+    private enum class Kind(val durationMs: Long, val amplitude: Int, val motorMs: Long) {
+        TICK(12, 120, 22),
+        LIGHT(20, 160, 30),
+        MEDIUM(32, 210, 45),
+        HEAVY(50, 255, 65),
+        SUCCESS(0, 0, 0),
     }
 
     private val vibrator: Vibrator? = try {
@@ -59,7 +65,8 @@ internal class Haptics(context: Context) {
     @Volatile
     private var lastTickAt = 0L
 
-    fun perform(kindName: String) {
+    fun perform(kindName: String, level: Int) {
+        if (level <= 0) return
         val kind = when (kindName.lowercase()) {
             "tick" -> Kind.TICK
             "light" -> Kind.LIGHT
@@ -72,71 +79,75 @@ internal class Haptics(context: Context) {
         if (!available) return
 
         if (kind == Kind.TICK) {
-            // Ticks can be fired every frame while mowing; don't flood the vibrator service.
+            // Ticks come in fast while mowing; keep them to a gentle purr.
             val now = SystemClock.uptimeMillis()
             if (now - lastTickAt < MIN_TICK_INTERVAL_MS) return
             lastTickAt = now
         }
+        val strong = level >= 2
 
         try {
             when {
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> vibrateApi29(v, kind)
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> vibrateApi26(v, kind)
-                else -> vibrateLegacy(v, kind)
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> vibrateApi33(v, effect(kind, strong))
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> vibrateApi26(v, effect(kind, strong))
+                else -> vibrateLegacy(v, kind, strong)
             }
         } catch (t: Throwable) {
             Log.w(TAG, "Vibration failed", t)
         }
     }
 
-    @SuppressLint("MissingPermission") // VIBRATE is declared in the manifest.
-    @RequiresApi(Build.VERSION_CODES.Q)
-    private fun vibrateApi29(v: Vibrator, kind: Kind) {
-        val effect = when (kind) {
-            Kind.TICK -> VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK)
-            Kind.LIGHT -> VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK)
-            Kind.MEDIUM -> VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK)
-            Kind.HEAVY -> oneShot(kind)
-            Kind.SUCCESS -> successWaveform()
-        }
-        v.vibrate(effect)
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    private fun vibrateApi33(v: Vibrator, effect: VibrationEffect) {
+        v.vibrate(effect, VibrationAttributes.createForUsage(VibrationAttributes.USAGE_MEDIA))
     }
 
-    @SuppressLint("MissingPermission")
     @RequiresApi(Build.VERSION_CODES.O)
-    private fun vibrateApi26(v: Vibrator, kind: Kind) {
-        v.vibrate(if (kind == Kind.SUCCESS) successWaveform() else oneShot(kind))
-    }
-
-    @SuppressLint("MissingPermission")
     @Suppress("DEPRECATION")
-    private fun vibrateLegacy(v: Vibrator, kind: Kind) {
+    private fun vibrateApi26(v: Vibrator, effect: VibrationEffect) {
+        v.vibrate(effect, GAME_AUDIO_ATTRIBUTES)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun vibrateLegacy(v: Vibrator, kind: Kind, strong: Boolean) {
         if (kind == Kind.SUCCESS) {
-            v.vibrate(SUCCESS_TIMINGS, -1)
+            v.vibrate(MOTOR_SUCCESS_TIMINGS, -1)
         } else {
-            v.vibrate(kind.durationMs)
+            v.vibrate(if (strong) kind.motorMs else kind.motorMs * 3 / 4)
         }
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    private fun oneShot(kind: Kind): VibrationEffect = VibrationEffect.createOneShot(
-        kind.durationMs,
-        if (amplitudeControl) kind.amplitude else VibrationEffect.DEFAULT_AMPLITUDE,
-    )
-
-    @RequiresApi(Build.VERSION_CODES.O)
-    private fun successWaveform(): VibrationEffect = if (amplitudeControl) {
-        VibrationEffect.createWaveform(SUCCESS_TIMINGS, SUCCESS_AMPLITUDES, -1)
-    } else {
-        VibrationEffect.createWaveform(SUCCESS_TIMINGS, -1)
+    private fun effect(kind: Kind, strong: Boolean): VibrationEffect {
+        if (kind == Kind.SUCCESS) {
+            return if (amplitudeControl) {
+                val amps = if (strong) SUCCESS_AMPLITUDES else SUCCESS_AMPLITUDES.map { it * 3 / 5 }.toIntArray()
+                VibrationEffect.createWaveform(SUCCESS_TIMINGS, amps, -1)
+            } else {
+                VibrationEffect.createWaveform(MOTOR_SUCCESS_TIMINGS, -1)
+            }
+        }
+        // Without amplitude control "soft" can only mean "shorter".
+        return if (amplitudeControl) {
+            val amp = if (strong) kind.amplitude else kind.amplitude * 3 / 5
+            VibrationEffect.createOneShot(kind.durationMs, amp.coerceIn(1, 255))
+        } else {
+            VibrationEffect.createOneShot(if (strong) kind.motorMs else kind.motorMs * 3 / 4, VibrationEffect.DEFAULT_AMPLITUDE)
+        }
     }
 
     private companion object {
         const val TAG = "ZenHaptics"
-        const val MIN_TICK_INTERVAL_MS = 25L
+        const val MIN_TICK_INTERVAL_MS = 60L
 
         // off, buzz, off, buzz, off, buzz : a short rising "ta-da".
-        val SUCCESS_TIMINGS = longArrayOf(0, 14, 60, 18, 60, 30)
-        val SUCCESS_AMPLITUDES = intArrayOf(0, 90, 0, 160, 0, 255)
+        val SUCCESS_TIMINGS = longArrayOf(0, 18, 60, 22, 60, 40)
+        val SUCCESS_AMPLITUDES = intArrayOf(0, 110, 0, 180, 0, 255)
+        val MOTOR_SUCCESS_TIMINGS = longArrayOf(0, 28, 70, 32, 70, 55)
+
+        val GAME_AUDIO_ATTRIBUTES: AudioAttributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_GAME)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
     }
 }
