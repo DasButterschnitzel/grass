@@ -1,4 +1,4 @@
-// Visual check of the regrowing lawn, the "next lawn" dialog and zen view.
+// Visual check of the regrowing lawn, the "next lawn" dialog and the minimal view.
 // usage: node lawn.js <url> <outdir> [lawn] [locale]
 const { chromium } = require(process.env.PLAYWRIGHT || 'playwright');
 (async () => {
@@ -44,7 +44,7 @@ const { chromium } = require(process.env.PLAYWRIGHT || 'playwright');
   await page.waitForTimeout(250);
   await page.screenshot({ path: `${out}/N${lawn}_5_newlawn.png` });
   console.log('after buy', JSON.stringify(await page.evaluate(() => ({ level: ZM.save.level, cash: ZM.save.cash, N: ZM.game.level.N, biome: ZM.game.biome.name }))));
-  await page.evaluate(() => { ZM.debug.step(60, 1 / 30); document.getElementById('btnZen').click(); });
+  await page.evaluate(() => { ZM.debug.step(60, 1 / 30); document.getElementById('btnView').click(); });
   console.log('zen', JSON.stringify(await mow(5, 1)));
   await page.waitForTimeout(250);
   await page.screenshot({ path: `${out}/N${lawn}_6_zen.png` });

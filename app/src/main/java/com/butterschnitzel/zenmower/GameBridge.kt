@@ -56,6 +56,20 @@ class GameBridge internal constructor(activity: MainActivity) {
     fun showRewarded(placement: String?): Boolean =
         activity?.adsManager?.showRewarded(placement.orEmpty().take(MAX_PLACEMENT_LENGTH)) ?: false
 
+    /** Hides the banner while the player enjoys ad-free time earned with a rewarded ad. */
+    @JavascriptInterface
+    fun setBannerHidden(hidden: Boolean) {
+        onMain { it.adsManager?.setBannerSuppressed(hidden) }
+    }
+
+    // -- Screen ----------------------------------------------------------------------------
+
+    /** The zen sleep timer lets the screen turn off again; `true` keeps it on while playing. */
+    @JavascriptInterface
+    fun setKeepAwake(awake: Boolean) {
+        onMain { it.setKeepScreenOn(awake) }
+    }
+
     // -- Privacy (UMP) ---------------------------------------------------------------------
 
     @JavascriptInterface

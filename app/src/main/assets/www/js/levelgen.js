@@ -52,6 +52,9 @@
   // Shape catalog in normalized space: x ∈ [-1,1] across, y ∈ [-A,A] down (A = aspect).
   const SHAPES = {
     meadow: () => (x, y) => sdBox(x, y, 0.95, 1.52, 0.2),
+    // zen gardens fill the whole screen, whatever its aspect ratio
+    full: (rnd, A) => (x, y) => sdBox(x, y, 0.95, A - 0.06, 0.22),
+    fullOval: (rnd, A) => (x, y) => sdEllipse(x, y, 0.98, A - 0.03),
     oval: () => (x, y) => sdEllipse(x, y, 0.98, 1.52),
     heart: () => (x, y) => sdHeart(x / 1.55, 0.52 - y / 2.0) * 1.55,
     pill: () => (x, y) => sdBox(x, y, 0.93, 1.52, 0.9),
@@ -80,23 +83,26 @@
   };
   const ORDER = ['meadow', 'oval', 'heart', 'clover', 'pill', 'wave', 'hex', 'peanut', 'diamond', 'cross', 'ring', 'blob', 'star', 'steps'];
 
-  ZM.generateLevel = function (N) {
+  // opts (zen gardens): { W, H, shape, biome, maxL, thick, pond, stones, flowers }
+  ZM.generateLevel = function (N, opts) {
+    const o = opts || {};
     const rnd = ZM.rng(0x9E3779B1 ^ (N * 2654435761));
-    const W = ZM.levelWidth(N);
-    const H = Math.round(W * 1.6);
+    const W = o.W || ZM.levelWidth(N);
+    const H = o.H || Math.round(W * 1.6);
     const A = H / W; // aspect in normalized units
     const S = 4; // terrain texels per cell
     const TW = W * S, TH = H * S;
-    const shapeName = N <= ORDER.length ? ORDER[N - 1] : ORDER[Math.floor(rnd() * ORDER.length)];
-    const land = SHAPES[shapeName](rnd);
+    const shapeName = o.shape || (N <= ORDER.length ? ORDER[N - 1] : ORDER[Math.floor(rnd() * ORDER.length)]);
+    const land = SHAPES[shapeName](rnd, A);
 
     // Obstacles: ponds, stepping stones, rocks and flower beds – more as levels go on.
     const ponds = [], rocks = [], beds = [], stones = [];
+    const zen = !!opts;
     if (shapeName === 'ring') ponds.push({ x: 0, y: 0, a: 0.38, b: 0.62 });
-    if (N >= 4 && shapeName !== 'ring' && rnd() < 0.55) {
-      ponds.push({ x: rnd.range(-0.45, 0.45), y: rnd.range(-0.9, 0.9), a: rnd.range(0.18, 0.3), b: rnd.range(0.16, 0.26) });
+    if (zen ? o.pond : N >= 4 && shapeName !== 'ring' && rnd() < 0.55) {
+      ponds.push(o.pond && o.pond.x !== undefined ? o.pond : { x: rnd.range(-0.45, 0.45), y: rnd.range(-0.9, 0.9), a: rnd.range(0.18, 0.3), b: rnd.range(0.16, 0.26) });
     }
-    if (N >= 6 && rnd() < 0.5) {
+    if (zen ? o.stones : N >= 6 && rnd() < 0.5) {
       const vertical = rnd() < 0.6;
       const ph = rnd() * 6, amp = rnd.range(0.15, 0.35), cnt = vertical ? 15 : 9;
       const y0 = rnd.range(-0.5, 0.5) * A;
@@ -107,11 +113,11 @@
         else stones.push({ x: t * 0.97, y: y0 + Math.sin(t * 2.2 + ph) * amp, r });
       }
     }
-    if (N >= 3) {
+    if (!zen && N >= 3) {
       const nr = Math.min(4, 1 + Math.floor(rnd() * (1 + N / 8)));
       for (let i = 0; i < nr; i++) rocks.push({ x: rnd.range(-0.8, 0.8), y: rnd.range(-1.35, 1.35), r: rnd.range(0.05, 0.1) });
     }
-    if (N >= 8 && rnd() < 0.45) {
+    if (!zen && N >= 8 && rnd() < 0.45) {
       beds.push({ x: rnd.range(-0.4, 0.4), y: rnd.range(-1.1, 1.1), w: rnd.range(0.22, 0.34), h: rnd.range(0.09, 0.13) });
     }
 
@@ -156,8 +162,8 @@
     const grass = new Uint8Array(n);
     const layers = new Uint8Array(n);
     const type = new Uint8Array(n);
-    const maxL = ZM.levelMaxLayers(N);
-    const target = ZM.levelThickness(N);
+    const maxL = o.maxL || ZM.levelMaxLayers(N);
+    const target = o.thick || ZM.levelThickness(N);
     const noise = ZM.makeNoise(Math.floor(rnd() * 1e9));
     const nscale = rnd.range(0.07, 0.11);
     const cells = [];
@@ -204,12 +210,12 @@
         if (dx * dx + dy * dy <= r * r && rnd() < prob) type[j] = t;
       }
     };
-    const flowerClusters = 2 + Math.floor(rnd() * 3);
+    const flowerClusters = o.flowers !== undefined ? o.flowers : 2 + Math.floor(rnd() * 3);
     for (let f = 0; f < flowerClusters; f++) blob(pick(), rnd.range(1.5, 3), 2, 0.28);
 
     return {
       N, W, H, A, S, TW, TH, terrain, grass, layers, type, total, maxL,
-      shape: shapeName, biome: ZM.biomeForLevel(N), value: ZM.lawnValue(N),
+      shape: shapeName, biome: o.biome || ZM.biomeForLevel(N), value: ZM.lawnValue(N),
       cellCount: cells.length, seed: Math.floor(rnd() * 1e9),
     };
   };

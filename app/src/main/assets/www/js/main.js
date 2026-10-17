@@ -10,10 +10,12 @@
     upg: { blade: 0, engine: 0, fert: 0, sprinkler: 0, fleet: 0, bots: 0 },
     skin: 'classic', skins: ['classic'],
     settings: { sfx: 0.9, music: 0.55, amb: 0.7, haptics: true, control: 'follow', quality: 'auto' },
-    stats: { totalEarned: 0, cells: 0, levels: 0, playTime: 0 },
+    stats: { totalEarned: 0, cells: 0, levels: 0, playTime: 0, zenTime: 0 },
     rate: 0, lastSeen: Date.now(), field: null, boostT: 0,
-    tutorial: { move: false, fleet: false, lawn: false, regrow: false, zen: false },
+    tutorial: { move: false, fleet: false, lawn: false, regrow: false, zen: false, zenMode: false },
     ads: { lastInter: 0, levelsSince: 0 },
+    zen: { scene: 'meadow', auto: false, breathe: false, mix: { grass: 0.75, wind: 0.75, water: 0.75, life: 0.75, music: 0.75 } },
+    adFreeUntil: 0,
     freeGemsAt: 0, created: Date.now(),
   });
 
@@ -82,6 +84,8 @@
     ZM.game = game;
     const ui = new ZM.UI(game);
     ZM.ui = ui;
+    const zen = new ZM.Zen(game, ui);
+    ZM.zen = zen;
     game.startLevel(save.level, true);
     setLoad(1);
 
@@ -121,7 +125,7 @@
     // ---------------------------------------------------------------- persistence
     const persist = () => {
       try {
-        game.saveFieldSnapshot();
+        if (game.mode !== 'zen') game.saveFieldSnapshot();
         save.lastSeen = Date.now();
         localStorage.setItem(KEY, JSON.stringify(save));
       } catch (e) { console.warn('save failed', e); }
@@ -131,16 +135,41 @@
 
     // ---------------------------------------------------------------- offline earnings
     const sessionStart = performance.now();
-    const checkOffline = (awaySec) => {
-      if (awaySec > 20 && game.field) game.field.fillAll(); // the lawn kept growing
-      if (awaySec < 120 || save.rate <= 0) return;
+    const idleIncome = (awaySec) => {
       const bots = save.upg.bots || 0;
       const factor = bots > 0 ? 0.08 + 0.025 * bots : 0.03;
       const secs = Math.min(awaySec, (2 + bots * 0.4) * 3600);
-      const amount = Math.floor(save.rate * secs * factor);
+      return { amount: Math.floor(save.rate * secs * factor), secs };
+    };
+    const checkOffline = (awaySec) => {
+      if (awaySec > 20 && game.field) game.field.fillAll(); // the lawn kept growing
+      if (awaySec < 120 || save.rate <= 0 || zen.on) return; // zen pays out when you leave it
+      const { amount, secs } = idleIncome(awaySec);
       if (amount >= 1 && !ui.modalOpen) ui.openOffline(amount, secs);
     };
     checkOffline((Date.now() - save.lastSeen) / 1000);
+    // back from the zen garden: the autopilot kept mowing your real lawn meanwhile
+    ZM.onZenExit = (secs) => {
+      if (secs < 90 || save.rate <= 0) return;
+      const r = idleIncome(secs);
+      if (r.amount >= 1 && !ui.modalOpen) ui.openOffline(r.amount, r.secs, 'zen_back');
+      persist();
+    };
+
+    // ---------------------------------------------------------------- ad-free time (rewarded)
+    let adFreeTimer = 0;
+    ZM.adFree = {
+      active: () => save.adFreeUntil > Date.now(),
+      left: () => Math.max(0, (save.adFreeUntil - Date.now()) / 1000),
+      grant(sec) { save.adFreeUntil = Math.max(Date.now(), save.adFreeUntil) + sec * 1000; this.apply(); persist(); },
+      apply() {
+        clearTimeout(adFreeTimer);
+        const on = this.active();
+        ZM.Native.setBannerHidden(on);
+        if (on) adFreeTimer = setTimeout(() => this.apply(), Math.min(this.left() * 1000 + 500, 2147483000));
+      },
+    };
+    if (ZM.adFree.active()) ZM.adFree.apply();
 
     // ---------------------------------------------------------------- ads cadence
     ZM.lastRewardedAt = 0;
@@ -150,7 +179,7 @@
       const session = (performance.now() - sessionStart) / 1000;
       const recentReward = now - ZM.lastRewardedAt < 90000;
       // only ever between lawns (a natural break), never while mowing
-      if (save.level >= 3 && now - save.ads.lastInter > 180000 && session > 120 && !recentReward) {
+      if (save.level >= 3 && now - save.ads.lastInter > 180000 && session > 120 && !recentReward && !ZM.adFree.active()) {
         ZM.Native.showInterstitial(() => {});
         save.ads.lastInter = now;
         save.ads.levelsSince = 0;
@@ -179,7 +208,7 @@
     ZM.Native.on('resume', onResume);
     document.addEventListener('visibilitychange', () => (document.hidden ? onPause() : onResume()));
     window.addEventListener('pagehide', persist);
-    ZM.Native.on('back', () => ui.onBack());
+    ZM.Native.on('back', () => (ui.modalOpen ? ui.onBack() : zen.onBack() || ui.onBack()));
 
     canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); lost = true; });
     canvas.addEventListener('webglcontextrestored', () => {
@@ -196,11 +225,12 @@
       if (ZM.debug && ZM.debug.paused) { last = now; return; }
       let dt = (now - last) / 1000;
       last = now;
-      if (dt <= 0) return;
+      if (dt <= 0 || zen.sleeping) return; // sleep timer ran out: no work at all
       const rawDt = dt;
       dt = Math.min(dt, 1 / 20);
       game.update(dt);
       ui.update(dt);
+      zen.update(dt);
       save.stats.playTime += dt;
 
       // earning rate (for offline income)
@@ -231,7 +261,7 @@
     requestAnimationFrame(frame);
     // Deterministic hooks for automated tests (headless browsers render slowly).
     ZM.debug = {
-      step(n, h) { for (let i = 0; i < n; i++) { game.update(h || 1 / 60); ui.update(h || 1 / 60); } },
+      step(n, h) { for (let i = 0; i < n; i++) { game.update(h || 1 / 60); ui.update(h || 1 / 60); zen.update(h || 1 / 60); } },
       draw() { game.draw(renderer); renderer.render(game, game.time); },
       persist,
     };

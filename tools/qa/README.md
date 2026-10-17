@@ -11,6 +11,7 @@ Run with `PLAYWRIGHT=/path/to/node_modules/playwright node tools/qa/<script>.js 
 | `gallery.js <url> <out> 2,6,9` | Screenshots of several lawns/biomes. |
 | `multitouch.js <url> <out>` | Two simultaneous CDP touch points → verifies each finger steers its own mower. |
 | `storeshots.js <url> <out>` | Regenerates the 1080×2160 Play Store screenshots. |
-| `audiotest.js <url> out.webm [secs] [level]` + `analyze.py in.wav spec.png` | Records the live audio mix while mowing and reports loudness / spectral balance. |
+| `audiotest.js <url> out.webm [secs] [lawn] [mow\|zen:<scene>]` + `analyze.py in.wav spec.png` | Records the live audio mix while mowing (golden patch, gem, next lawn) or in a zen scene and reports loudness / spectral balance. |
+| `harmony.py in.wav [0,2,4,7,9]` | Finds the stable tones in a recording and reports energy outside the key, semitone/tritone intervals, roughness and tuning – the "is anything dissonant?" check. |
 
 All scripts drive the game through the `ZM.debug` hooks (`paused`, `step(n, dt)`, `draw()`) so results don't depend on the software renderer's frame rate.

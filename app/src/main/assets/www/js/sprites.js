@@ -287,6 +287,11 @@
     add('confetti', 16, 24, (c, w, h) => { rr(c, 0, 0, w, h, 4); c.fillStyle = '#fff'; c.fill(); });
     add('arrow', 64, 64, (c, w) => drawArrow(c, w));
     add('white', 8, 8, (c, w, h) => { c.fillStyle = '#fff'; c.fillRect(0, 0, w, h); });
+    add('drop', 8, 64, (c, w, h) => {
+      const g = c.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.75, 'rgba(255,255,255,0.7)'); g.addColorStop(1, 'rgba(255,255,255,1)');
+      c.fillStyle = g; rr(c, 1, 0, w - 2, h, 3); c.fill();
+    });
     return { canvas: cv, sprites };
   };
 

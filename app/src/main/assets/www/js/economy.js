@@ -34,6 +34,9 @@
     };
   };
 
+  // Zen garden: one calm, medium-size mower; the lawn grows back quickly so it never ends.
+  ZM.zenStats = () => ({ radius: 3.0, speed: 9.5, regrow: 0.1, valueMult: 0, mowers: 1, botFrac: 0 });
+
   // Effect label for upgrade cards: "now → next".
   ZM.upgradeEffect = function (id, lvl, next) {
     const s = ZM.stats({ [id]: lvl });

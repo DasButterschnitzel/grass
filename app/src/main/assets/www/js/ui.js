@@ -22,21 +22,31 @@
       document.querySelector('#cash i').innerHTML = I().coin;
       document.querySelector('#gems i').innerHTML = I().gem;
       document.querySelector('#btnBoost .act-ico').innerHTML = I().play;
-      document.querySelector('#btnZen .act-ico').innerHTML = I().leaf;
+      document.querySelector('#btnZen .act-ico').innerHTML = I().lotus;
       document.querySelector('#btnShop .act-ico').innerHTML = I().shop;
+      document.querySelector('#btnView .act-ico').innerHTML = I().eye;
+      document.querySelector('#nextPrice i').innerHTML = I().coin;
       $('tutHand').innerHTML = I().hand;
       document.querySelector('#btnZen .act-lbl').textContent = ZM.t('Zen');
       document.querySelector('#btnShop .act-lbl').textContent = ZM.t('Shop');
       const tap = (el, fn) => el.addEventListener('click', (e) => { e.stopPropagation(); if (ZM.audio) { ZM.audio.unlock(); ZM.audio.click(); } fn(); });
       tap($('btnSettings'), () => this.openSettings());
       tap($('btnShop'), () => this.openShop());
-      tap($('btnZen'), () => this.toggleZen());
-      tap($('zenExit'), () => this.toggleZen());
+      tap($('btnZen'), () => { if (ZM.zen) ZM.zen.enter(); });
+      tap($('btnView'), () => this.toggleMinimal());
+      tap($('viewExit'), () => this.toggleMinimal());
       tap($('btnBoost'), () => this.boost());
       tap($('levelBox'), () => this.openNextLawn());
-      $('zenExit').innerHTML = I().leaf;
+      $('viewExit').innerHTML = I().eye;
 
       const wrap = $('upgrades');
+      // the next lawn is the first "card": what it costs and how close you are
+      const lc = document.createElement('div');
+      lc.className = 'card lawn';
+      lc.innerHTML = `<div class="pv"></div><div class="nm"></div><div class="lv"></div><div class="fx"></div><div class="cost"><div class="fill"></div><i>${I().coin}</i><span></span></div>`;
+      wrap.appendChild(lc);
+      this.lawnCard = { el: lc, pv: lc.querySelector('.pv'), nm: lc.querySelector('.nm'), lv: lc.querySelector('.lv'), fx: lc.querySelector('.fx'), cost: lc.querySelector('.cost span'), fill: lc.querySelector('.cost .fill') };
+      lc.addEventListener('click', (e) => { e.stopPropagation(); if (ZM.audio) { ZM.audio.unlock(); ZM.audio.click(); } this.openNextLawn(); });
       this.cards = {};
       for (const u of ZM.UPGRADES) {
         const c = document.createElement('div');
@@ -113,6 +123,10 @@
       const g = this.game, s = this.save, c = this.cache;
       // events from the simulation
       while (g.events.length) this.onEvent(g.events.shift());
+      if (g.mode === 'zen') { // the game HUD is hidden in zen mode – only toasts matter
+        if (this.toastT > 0) { this.toastT -= dt; if (this.toastT <= 0) $('toast').classList.add('hidden'); }
+        return;
+      }
 
       // smooth money counter
       const diff = s.cash - this.dispCash;
@@ -129,11 +143,31 @@
         const p = ZM.clamp(this.dispCash / cost, 0, 1);
         const pct = Math.floor(p * 200) / 2;
         const ready = s.cash >= cost;
-        if (c.pct !== pct) { $('progressFill').style.width = pct + '%'; c.pct = pct; }
-        const label = ready ? ZM.t('Next lawn') + ' ▶' : ZM.t('Next lawn') + ' ' + ZM.fmt(cost);
+        if (c.pct !== pct) {
+          $('progressFill').style.width = pct + '%';
+          this.lawnCard.fill.style.width = pct + '%';
+          c.pct = pct;
+        }
+        // narrow phones: the bar only has room for the percentage
+        this.barCheckT = (this.barCheckT || 0) - dt;
+        if (this.barCheckT <= 0) { this.barCheckT = 1; this.barWide = $('progress').clientWidth > 128; }
+        const label = ready ? ZM.t(this.barWide ? 'lawn_ready' : 'lawn_ready_short') : (this.barWide ? ZM.t('Next lawn') + ' · ' : '▶ ') + Math.floor(p * 100) + '%';
         if (c.lawnLbl !== label) { $('progressText').textContent = label; c.lawnLbl = label; }
+        const price = ZM.fmt(cost);
+        if (c.price !== price) { $('nextPriceText').textContent = price; this.lawnCard.cost.textContent = price; c.price = price; }
+        if (c.lawnN !== g.level.N) {
+          c.lawnN = g.level.N;
+          const nb = ZM.biomeForLevel(g.level.N + 1), lc = this.lawnCard;
+          lc.pv.style.background = `radial-gradient(circle at 35% 30%, ${ZM.css(nb.blades[0])}, ${ZM.css(nb.blades[3])} 55%, ${ZM.css(nb.root)} 100%)`;
+          lc.pv.textContent = g.level.N + 1;
+          lc.nm.textContent = ZM.t('Lawn') + ' ' + (g.level.N + 1);
+          lc.lv.textContent = ZM.biomeName(nb);
+        }
         if (c.ready !== ready) {
           $('levelBox').classList.toggle('ready', ready);
+          this.lawnCard.el.classList.toggle('ready', ready);
+          this.lawnCard.el.classList.toggle('poor', !ready);
+          this.lawnCard.fx.textContent = ready ? ZM.t('Move there!') : ZM.t('lawn_mult', { m: ZM.LAWN_MULT });
           c.ready = ready;
           if (ready && !s.tutorial.lawn) { s.tutorial.lawn = true; this.toast(ZM.t('tip_next_lawn'), 4.5); }
         }
@@ -204,7 +238,7 @@
 
     // ------------------------------------------------------------ layout
     playRect() {
-      if (this.zenView) {
+      if (this.minimalView || document.body.classList.contains('zen')) {
         const cs0 = getComputedStyle(document.documentElement);
         const v = (k) => parseFloat(cs0.getPropertyValue(k)) || 0;
         return { x: v('--sal') + 6, y: v('--sat') + 10, w: window.innerWidth - v('--sal') - v('--sar') - 12, h: window.innerHeight - v('--sat') - v('--sab') - 20 };
@@ -326,10 +360,10 @@
       box.append(go, later);
     }
 
-    openOffline(amount, secs) {
+    openOffline(amount, secs, subKey) {
       const card = this.openModal(`
         <div class="m-title">${ZM.t('Welcome back!')}</div>
-        <div class="m-sub">${ZM.t('offline_sub', { t: ZM.fmtTime(secs) })}</div>
+        <div class="m-sub">${ZM.t(subKey || 'offline_sub', { t: ZM.fmtTime(secs) })}</div>
         <div class="reward"><i>${I().coin}</i><span>+${ZM.fmt(amount)}</span></div>
         <div id="offBtns"></div>`, { closable: false });
       const box = card.querySelector('#offBtns');
@@ -364,14 +398,15 @@
       }));
     }
 
-    // Zen view: hide every number and button – just you, the lawn and the sounds.
-    toggleZen() {
-      this.zenView = !this.zenView;
-      this.game.zenView = this.zenView;
-      document.body.classList.toggle('zenview', this.zenView);
+    // Minimal view: hide every number and button – just you, the lawn and the sounds.
+    // (The separate Zen mode lives in zen.js.)
+    toggleMinimal() {
+      this.minimalView = !this.minimalView;
+      this.game.minimalView = this.minimalView;
+      document.body.classList.toggle('minimal', this.minimalView);
       this.hideTutorial();
       $('toast').classList.add('hidden');
-      if (this.zenView && !this.save.tutorial.zen) { this.save.tutorial.zen = true; this.toast(ZM.t('zen_toast'), 3.5); }
+      if (this.minimalView && !this.save.tutorial.zen) { this.save.tutorial.zen = true; this.toast(ZM.t('clean_toast'), 3.5); }
       if (ZM.onLayout) ZM.onLayout();
     }
 

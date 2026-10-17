@@ -440,6 +440,14 @@ class MainActivity : Activity() {
     // Helpers used by GameBridge (main thread)
     // ---------------------------------------------------------------------------------------
 
+    internal fun setKeepScreenOn(on: Boolean) {
+        if (on) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
     internal fun openExternally(uri: Uri) {
         val scheme = uri.scheme?.lowercase(Locale.ROOT)
         if (scheme !in EXTERNAL_SCHEMES) {

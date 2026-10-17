@@ -51,6 +51,10 @@
     share(text) { if (A) call('share', text); else if (navigator.share) navigator.share({ text }).catch(() => {}); },
     appVersion() { return (A && call('getAppVersion')) || 'web'; },
     requestInsets() { call('requestInsets'); },
+    // hide the banner during rewarded ad-free time
+    setBannerHidden(v) { call('setBannerHidden', !!v); },
+    // the sleep timer lets the screen turn off again
+    setKeepAwake(v) { call('setKeepAwake', !!v); },
     _adShowing(v) { fire('adShowing', v); },
   };
 

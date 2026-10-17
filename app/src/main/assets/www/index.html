@@ -15,7 +15,10 @@
     <button id="btnSettings" class="round-btn" aria-label="Settings"></button>
     <button id="levelBox" aria-label="Next lawn">
       <div id="levelTitle"><span id="levelNum">Level 1</span><span id="biomeName">Spring Meadow</span></div>
-      <div id="progress"><div id="progressFill"></div><div id="progressShine"></div><span id="progressText"></span></div>
+      <div id="nextRow">
+        <div id="progress"><div id="progressFill"></div><div id="progressShine"></div><span id="progressText"></span></div>
+        <div id="nextPrice"><i></i><span id="nextPriceText"></span></div>
+      </div>
     </button>
     <div id="wallet">
       <div id="cash" class="pill"><i class="ico-coin"></i><span id="cashText">0</span></div>
@@ -32,11 +35,12 @@
     <div class="act-left">
       <button id="btnZen" class="act-btn" aria-label="Zen mode"><span class="act-ico"></span><span class="act-lbl">Zen</span></button>
       <button id="btnShop" class="act-btn" aria-label="Mower shop"><span class="act-ico"></span><span class="act-lbl">Shop</span></button>
+      <button id="btnView" class="act-btn icon-only" aria-label="Minimal view"><span class="act-ico"></span></button>
     </div>
     <button id="btnBoost" class="act-btn gold" aria-label="Double cash"><span class="act-ico"></span><span class="act-lbl" id="boostLbl">×2 Cash</span></button>
   </div>
 
-  <button id="zenExit" aria-label="Exit zen view"></button>
+  <button id="viewExit" aria-label="Show buttons"></button>
   <div id="banner" class="hidden"><div id="bannerTitle"></div><div id="bannerSub"></div></div>
   <div id="toast" class="hidden"></div>
   <div id="tutorial" class="hidden"><div id="tutHand"></div><div id="tutText">Drag to mow</div></div>
@@ -45,6 +49,18 @@
     <div id="upgrades"></div>
   </div>
 </div>
+
+<div id="zenHud">
+  <div id="zenTop">
+    <button id="zenBack" class="zbtn" aria-label="Back to the game"></button>
+    <div id="zenTitle"><div id="zenName"></div><div id="zenSub"></div></div>
+  </div>
+  <div id="breath"><div class="ring"></div><div class="txt" id="breathTxt"></div></div>
+  <div id="zenSheet" class="hidden"></div>
+  <div id="zenDock"></div>
+</div>
+<div id="sleepShade" class="hidden"><div class="sl-moon"></div><div class="sl-t">Gute Nacht</div><div class="sl-s"></div></div>
+<div id="fader"></div>
 
 <div id="modal" class="hidden"><div id="modalCard"></div></div>
 
@@ -66,9 +82,12 @@
 <script src="js/particles.js"></script>
 <script src="js/game.js"></script>
 <script src="js/audio.js"></script>
+<script src="js/music.js"></script>
+<script src="js/soundscape.js"></script>
 <script src="js/bridge.js"></script>
 <script src="js/icons.js"></script>
 <script src="js/ui.js"></script>
+<script src="js/zen.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

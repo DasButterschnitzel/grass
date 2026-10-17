@@ -5,7 +5,7 @@
 **App name** (max 30): `Zen Mower: ASMR Grass Cutting`
 
 **Short description** (max 80):
-`Relaxing ASMR lawn mowing. Grass that grows back, calm music, endless lawns.`
+`Relaxing ASMR lawn mowing, a zen garden with rain & ocean sounds, endless lawns.`
 
 **Full description:**
 
@@ -15,9 +15,16 @@ Zen Mower is a calm, deeply satisfying grass-cutting game made for unwinding. Gl
 
 🌿 PURE ASMR
 • Every single blade you cut makes sound – the faster you mow, the richer the rustle
-• Chimes that always land in tune with the relaxing background music
+• Mowing plays a gentle kalimba melody – always in perfect harmony with the music
 • Birds, crickets, ocean waves and wind – every garden has its own soundscape
 • Play with headphones for the full experience
+
+🧘 ZEN MODE
+• A separate, endless garden just for relaxing – no coins, no goals
+• 7 scenes: Summer Meadow, Gentle Rain, Ocean Breeze, Starry Night, Autumn Wind, Snowy Silence and Temple Garden with singing bowls
+• Mix wind, rain, waves, nature and music the way you like
+• Every finger is a mower – or just watch the autopilot mow perfect stripes
+• Breathing guide and a sleep timer that gently fades everything out
 
 🌱 THE LAWN GROWS BACK
 • Mow, watch it grow back, mow again – an endless, meditative loop
@@ -39,7 +46,7 @@ Zen Mower is a calm, deeply satisfying grass-cutting game made for unwinding. Gl
 • Thick, multi-layered grass that gets lusher on every lawn
 • Combos, big satisfying numbers and offline earnings
 
-🧘 ZEN VIEW
+👁 MINIMAL VIEW
 • Hide every number and button – just you, the lawn and the sounds
 
 Perfect for killing time, winding down before sleep or taking a mindful break.
@@ -51,7 +58,7 @@ Perfect for killing time, winding down before sleep or taking a mindful break.
 **App-Name** (max. 30): `Zen Mower: ASMR Rasenmähen`
 
 **Kurzbeschreibung** (max. 80):
-`Entspannendes ASMR-Rasenmähen: Gras wächst nach, ruhige Musik, endlose Rasen.`
+`Entspannendes ASMR-Rasenmähen, Zen-Garten mit Regen & Meeresrauschen, endlos.`
 
 **Vollständige Beschreibung:**
 
@@ -61,9 +68,16 @@ Zen Mower ist ein ruhiges, unglaublich befriedigendes Rasenmäh-Spiel zum Abscha
 
 🌿 PURES ASMR
 • Jeder geschnittene Halm erzeugt Klang – je schneller du mähst, desto voller das Rascheln
-• Glockentöne, die immer harmonisch zur Hintergrundmusik passen
+• Beim Mähen entsteht eine sanfte Kalimba-Melodie – immer perfekt harmonisch zur Musik
 • Vögel, Grillen, Meeresrauschen und Wind – jeder Garten hat seine eigene Klangwelt
 • Mit Kopfhörern spielen für das volle Erlebnis
+
+🧘 ZEN-MODUS
+• Ein eigener, endloser Garten nur zum Entspannen – kein Geld, kein Ziel
+• 7 Szenen: Sommerwiese, Sanfter Regen, Meeresbrise, Sternennacht, Herbstwind, Schneestille und Tempelgarten mit Klangschalen
+• Mische Wind, Regen, Wellen, Natur und Musik ganz nach deinem Geschmack
+• Jeder Finger ist ein Mäher – oder schau dem Autopiloten beim Streifenmähen zu
+• Atem-Hilfe und Schlaf-Timer, der alles sanft ausblendet
 
 🌱 DER RASEN WÄCHST NACH
 • Mähen, nachwachsen lassen, wieder mähen – ein endloser, meditativer Kreislauf
@@ -85,7 +99,7 @@ Zen Mower ist ein ruhiges, unglaublich befriedigendes Rasenmäh-Spiel zum Abscha
 • Dichtes, mehrschichtiges Gras, das auf jedem Rasen üppiger wird
 • Kombos, große Zahlen und Offline-Einnahmen
 
-🧘 ZEN-ANSICHT
+👁 MINIMAL-ANSICHT
 • Blende alle Zahlen und Knöpfe aus – nur du, der Rasen und die Klänge
 
 Perfekt zum Zeitvertreib, zum Runterkommen vor dem Schlafen oder für eine achtsame Pause.
@@ -100,4 +114,4 @@ Perfekt zum Zeitvertreib, zum Runterkommen vor dem Schlafen oder für eine achts
 * Ads: **Yes, contains ads**.
 * Data safety: see `store/data-safety.md`.
 * Privacy policy URL: host `docs/privacy-policy.html` (e.g. GitHub Pages) and paste the URL.
-* Graphics: `store/icon-512.png`, `store/feature-graphic.png`, screenshots in `store/screenshots/` (1080×2160).
+* Graphics: `store/icon-512.png`, `store/feature-graphic.png`, 8 screenshots in `store/screenshots/` (1080×2160; 7 and 8 show the zen mode).

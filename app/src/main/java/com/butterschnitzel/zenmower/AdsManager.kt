@@ -72,6 +72,9 @@ class AdsManager(
     private var bannerVisible = false
     private var bannerFailures = 0
 
+    /** True while the player enjoys ad-free time earned with a rewarded ad. */
+    private var bannerSuppressed = false
+
     // Interstitial
     @Volatile
     private var interstitialAd: InterstitialAd? = null
@@ -215,7 +218,7 @@ class AdsManager(
     // -----------------------------------------------------------------------------------------
 
     private fun loadBanner() {
-        if (destroyed || !sdkReady) return
+        if (destroyed || !sdkReady || bannerSuppressed) return
         val view = adView ?: createAdView() ?: return
         try {
             view.loadAd(AdRequest.Builder().build())
@@ -275,8 +278,30 @@ class AdsManager(
     private fun setBannerVisible(visible: Boolean) {
         if (bannerVisible == visible) return
         bannerVisible = visible
-        bannerContainer.isVisible = visible
-        callbacks.onBannerVisibilityChanged(visible)
+        applyBannerVisibility()
+    }
+
+    /**
+     * Hides (and pauses) the banner during rewarded ad-free time. Main thread only. While
+     * suppressed the banner neither shows nor refreshes; it comes back when the time is over.
+     */
+    fun setBannerSuppressed(suppressed: Boolean) {
+        if (destroyed || bannerSuppressed == suppressed) return
+        bannerSuppressed = suppressed
+        try {
+            if (suppressed) adView?.pause() else adView?.resume()
+        } catch (t: Throwable) {
+            Log.w(TAG, "AdView pause/resume failed", t)
+        }
+        applyBannerVisibility()
+        if (!suppressed && !bannerVisible) loadBanner()
+    }
+
+    private fun applyBannerVisibility() {
+        val show = bannerVisible && !bannerSuppressed
+        if (bannerContainer.isVisible == show) return
+        bannerContainer.isVisible = show
+        callbacks.onBannerVisibilityChanged(show)
     }
 
     // -----------------------------------------------------------------------------------------
@@ -544,6 +569,7 @@ class AdsManager(
     }
 
     fun resume() {
+        if (bannerSuppressed) return
         try {
             adView?.resume()
         } catch (t: Throwable) {

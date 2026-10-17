@@ -1,10 +1,10 @@
 'use strict';
-// Struct-of-arrays particle system: clippings, sparkles, petals, confetti, ambience.
+// Struct-of-arrays particle system: clippings, sparkles, petals, confetti, rain, ambience.
 (function (ZM) {
   const MAX = 3000;
   const F_ADD = 1, F_GRAV = 2, F_FLUTTER = 4, F_FADEIN = 8, F_SPIN_SCALE = 16;
   ZM.PF = { ADD: F_ADD, GRAV: F_GRAV, FLUTTER: F_FLUTTER, FADEIN: F_FADEIN, SPINSCALE: F_SPIN_SCALE };
-  ZM.SPR = ['clip', 'spark', 'dot', 'petal', 'leaf', 'confetti', 'glow', 'coin', 'gem', 'clover', 'butterfly', 'arrow', 'white'];
+  ZM.SPR = ['clip', 'spark', 'dot', 'petal', 'leaf', 'confetti', 'glow', 'coin', 'gem', 'clover', 'butterfly', 'arrow', 'white', 'drop', 'ring'];
   const SPR_INDEX = {};
   ZM.SPR.forEach((n, i) => (SPR_INDEX[n] = i));
 
@@ -67,6 +67,7 @@
         if (spr === 0) { sx = s * 0.4; } // clipping is a thin blade
         else if (spr === 5) { sx = s * 0.7; sy = s * Math.abs(Math.cos(this.rot[i] * 1.7)) + s * 0.1; }
         else if (spr === 3) { sx = s * 0.75; }
+        else if (spr === 13) { sx = s * 0.09; } // rain streak
         const b = fl & F_ADD ? ab : nb;
         b.push(this.x[i], this.y[i], sx, sy, this.rot[i], uvs[spr], this.r[i], this.g[i], this.b[i], alpha);
       }

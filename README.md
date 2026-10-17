@@ -1,12 +1,12 @@
 # Zen Mower – relaxing ASMR grass cutting (Android)
 
-A calm, endlessly satisfying lawn-mowing game for Android – inspired by “+1 Cut Grass ASMR”, rebuilt from scratch with bolder visuals, synthesized ASMR audio, multi-touch fleets, unlimited procedural levels and AdMob monetization.
+A calm, endlessly satisfying lawn-mowing game for Android – inspired by “+1 Cut Grass ASMR”, rebuilt from scratch with bolder visuals, synthesized ASMR audio in perfect harmony, a separate zen mode with nature soundscapes, multi-touch fleets, unlimited procedural levels and AdMob monetization.
 
 <p align="center">
   <img src="store/screenshots/1_mow.png" width="160">
   <img src="store/screenshots/2_lavender.png" width="160">
-  <img src="store/screenshots/3_neon.png" width="160">
-  <img src="store/screenshots/4_moon.png" width="160">
+  <img src="store/screenshots/7_zen_temple.png" width="160">
+  <img src="store/screenshots/8_zen_night.png" width="160">
 </p>
 
 ## What's in the game
@@ -14,12 +14,14 @@ A calm, endlessly satisfying lawn-mowing game for Android – inspired by “+1 
 | | |
 |---|---|
 | **Grass** | Every blade is GPU-instanced (up to ~17 000 per field) with wind gusts, drifting cloud shadows, blades that bend away from the mower and real lawn stripes in the direction you mowed. Like the original, the lawn **grows back** continuously – you can watch every blade get taller again. |
-| **ASMR audio** | 100 % synthesized at runtime (no audio files): granular crunch/snip/rustle grains whose density follows the actual cut rate, blade whirr, kalimba chimes that always land on the current chord of the live-generated ambient music, nature ambience per biome (birds, crickets, waves, wind, chimes), convolution reverb. |
+| **ASMR audio** | 100 % synthesized at runtime (no audio files): granular crunch/snip/rustle grains whose density follows the actual cut rate, a soft blade swish, live-generated ambient pads, nature ambience per garden, convolution reverb, glue compressor + limiter. |
+| **Harmony** | Every garden has one key and **every pitched sound uses only its pentatonic scale** – pads, the kalimba melody you "play" while mowing (quantised to the beat), bells, wind chimes, the singing bowl and even the tuned birds, crickets, owl and gulls. A pentatonic scale has no semitones and no tritone, so nothing can clash. Key changes fade out every note of the old key. Verified with `tools/qa/harmony.py` (tonal energy outside the key: 27 % → 0.4 %). |
 | **Multi-touch** | Up to 4 mowers – each finger steers its own mower. Autopilot drives the ones you're not steering. |
-| **Endless lawns** | As in the original you **buy the next lawn** (price shown on the golden bar at the top). Each lawn pays ×6 per blade and has its own biome and shape: 14 shapes (heart, star, clover, ring island …) with ponds, stepping stones, flower beds and rocks; 10 biomes, then endless hue-shifted cycles. Thicker multi-layer grass on later lawns. |
+| **Endless lawns** | As in the original you **buy the next lawn** – its price is always visible next to the progress bar at the top and on the first card of the upgrade bar. Each lawn pays ×6 per blade and has its own biome and shape: 14 shapes (heart, star, clover, ring island …) with ponds, stepping stones, flower beds and rocks; 10 biomes, then endless hue-shifted cycles. Thicker multi-layer grass on later lawns. |
 | **Progression** | The original's four upgrades – **Blade** (cut size), **Engine** (speed), **Fertilizer** (×(1+level) coins per blade), **Sprinkler** (regrowth speed) – plus **Fleet** (multi-touch mowers) and **Autopilot**. Golden patches (×12 + bonus), hidden gems, lucky clovers → frenzy, combos, offline earnings, 8 mower skins bought with gems. Lawn prices were tuned with an automated bot: ~1 min for the first lawn, then a steady few minutes per lawn, forever. |
-| **Zen view** | Hides every number and button – just the lawn, the mowers and the sounds. |
-| **Monetization** | AdMob adaptive banner, interstitial only when you move to a new lawn (max every 3 min, never in the first 2 minutes or right after a rewarded ad), rewarded ads (×2 offline earnings, 3-min ×2 cash boost, +5 gems). Google UMP consent (GDPR/EEA) + “Privacy & ad choices” in settings. |
+| **Zen mode** | A separate, endless garden just for relaxing – no coins, no goals. 7 scenes with their own soundscapes: Summer Meadow (breeze, birds, brook), Gentle Rain (rain, distant thunder, visible rain & splashes), Ocean Breeze (waves, gulls), Starry Night (crickets, owl, fireflies), Autumn Wind (gusts, rustling leaves, singing wind tones), Snowy Silence (wind chimes) and Temple Garden (singing bowls, brook, pond with stepping stones). Sound mixer (mowing / wind / water / nature / music), every finger is a mower, autopilot "watch" mode that mows perfect stripes, breathing guide (4-1-6) and a sleep timer that fades out and lets the screen turn off. |
+| **Minimal view** | The eye button hides every number and button in the normal game. |
+| **Monetization** | AdMob adaptive banner, interstitial only when you move to a new lawn (max every 3 min, never in the first 2 minutes or right after a rewarded ad), rewarded ads (×2 offline earnings, 3-min ×2 cash boost, +5 gems, **30 minutes without ads** in zen mode). Google UMP consent (GDPR/EEA) + “Privacy & ad choices” in settings. |
 | **Polish** | English + German (auto by device language), haptics, adaptive resolution, save/resume mid-level, back-button handling, edge-to-edge/immersive with notch support. |
 
 ## Architecture
@@ -30,7 +32,10 @@ app/src/main/assets/www/        The game: WebGL2 (GL1 fallback) renderer + WebAu
   js/levelgen.js                procedural fields (SDF shapes, distance-encoded terrain)
   js/shaders.js / render.js     grass blades, terrain, sprites, particles, text
   js/game.js                    simulation (mowers, multitouch, cutting, combos, autopilot, level flow)
-  js/audio.js                   ASMR synthesis + generative music
+  js/audio.js                   ASMR synthesis (grass, instruments, event sounds, master chain)
+  js/music.js                   one key per garden: pentatonic harmony, pads, mowing melody
+  js/soundscape.js              wind, rain, waves, brook, birds, crickets, owl, chimes, bowl
+  js/zen.js                     zen mode (scenes, mixer, autopilot stripes, breathing, sleep timer)
   js/economy.js                 every balancing number lives here
   js/ui.js / css/style.css      HUD, dialogs, shop, settings
 store/                          Play Store icon, feature graphic, screenshots, listing texts (EN/DE), data-safety answers
