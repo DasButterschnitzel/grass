@@ -19,6 +19,8 @@
       this.spawnT = 0;
       this.speed01 = 0;
       this.idleT = 0; this.dying = 0;
+      this.lx = x; this.ly = y; this.netSpd = 0; // distance really covered (cells/s)
+      this.ftx = x; this.fty = y;                // formation spot
     }
   }
 
@@ -27,6 +29,9 @@
   const SLOTS = [[-1.95, 1.1], [1.95, 1.1], [-3.9, 2.2]];
   const ROUND_DONE = 0.98;   // share of the lawn that counts as "mowed everything"
   const HAPTIC_STEP = 3.5;   // grass layers cut per vibration tick
+  const CUT_SPEED = 0.08;    // below this share of top speed (distance really covered) the
+                             // blade only idles: a parked mower must not harvest the grass
+                             // regrowing underneath it
 
   class Game {
     constructor(save, hooks) {
@@ -379,12 +384,13 @@
       const valueBase = zen ? 0 : lv.value * st.valueMult * (this.save.boostT > 0 ? 2 : 1) * (frenzy ? 2 : 1);
       let cutsFrame = 0, thickSum = 0, panSum = 0, speedSum = 0, heightSum = 0;
 
+      if (!zen && this.mowers.length > 1) this.planFormation();
       for (const m of this.mowers) {
         this.moveMower(m, dt);
         speedSum += m.speed01;
         if (m.spawnT > 0) m.spawnT = Math.max(0, m.spawnT - dt * 2);
         m.disc += dt * (14 + m.speed01 * 22);
-        if (canCut) {
+        if (canCut && m.netSpd > CUT_SPEED * st.speed) {
           const res = this.cutAround(m, R, valueBase);
           cutsFrame += res;
           if (res > 0) panSum += ((m.x / lv.W) * 2 - 1) * res;
@@ -402,6 +408,12 @@
         }
       }
       this.separateMowers();
+      // how far each mower really got this frame (after being pushed apart); a mower that
+      // only strains against another one, or stands still, does not cut (next frame)
+      for (const m of this.mowers) {
+        const inst = Math.hypot(m.x - m.lx, m.y - m.ly) / Math.max(dt, 1e-3);
+        m.netSpd = m.netSpd * 0.5 + inst * 0.5; m.lx = m.x; m.ly = m.y;
+      }
       if (zen) this.updateZenMowers(dt);
 
       if (cutsFrame > 0) {
@@ -481,24 +493,41 @@
       return this.mowers[0];
     }
 
-    formationTarget(m) {
+    // Formation spots for the followers, handed out one after another so no two want the
+    // same place (they used to push against each other forever). A slot off the lawn moves
+    // to the other side, further back or right behind the leader; if nothing is free the
+    // mower simply stays where it is.
+    planFormation() {
       const L = this.leader();
-      if (!L) return false;
-      let k = 0;
-      for (const o of this.mowers) { if (o === m) break; if (o !== L && o.pointer === null) k++; }
-      const slot = SLOTS[Math.min(k, SLOTS.length - 1)];
+      if (!L) return;
       const R = this.stats.radius, a = L.angle, lv = this.level, grass = this.field.grass;
+      const minD = R * 0.9 + 1.4;
       const fx = Math.sin(a), fy = -Math.cos(a), rx = Math.cos(a), ry = Math.sin(a);
-      // a slot that would put the mower off the lawn moves to the other side, closer in, or
-      // right behind the leader – nobody drives around next to the grass
       const at = (sx, sy) => {
         const x = L.x + rx * sx * R - fx * sy * R, y = L.y + ry * sx * R - fy * sy * R;
         const ix = Math.floor(x), iy = Math.floor(y);
         return ix >= 0 && iy >= 0 && ix < lv.W && iy < lv.H && grass[iy * lv.W + ix] ? [x, y] : null;
       };
-      const p = at(slot[0], slot[1]) || at(-slot[0], slot[1]) || at(slot[0] * 0.5, slot[1]) || at(0, slot[1] + 1.2) || at(0, 1.2) || [L.x, L.y];
-      m.tx = ZM.clamp(p[0], 0.5, lv.W - 0.5);
-      m.ty = ZM.clamp(p[1], 0.5, lv.H - 0.5);
+      const taken = [[L.x, L.y]];
+      for (const m of this.mowers) if (m !== L && m.pointer !== null) taken.push([m.x, m.y]);
+      let k = 0;
+      for (const m of this.mowers) {
+        if (m === L || m.pointer !== null) continue;
+        const [sx, sy] = SLOTS[Math.min(k, SLOTS.length - 1)];
+        k++;
+        let p = null;
+        for (const [cx, cy] of [[sx, sy], [-sx, sy], [sx * 0.5, sy + 1], [-sx * 0.5, sy + 1], [0, sy + 1.2], [sx, sy + 2.2], [-sx, sy + 2.2], [0, 2.4 + k * 1.2]]) {
+          const q = at(cx, cy);
+          if (q && taken.every(([tx, ty]) => Math.hypot(q[0] - tx, q[1] - ty) > minD)) { p = q; break; }
+        }
+        if (!p) p = [m.x, m.y];
+        taken.push(p);
+        m.ftx = ZM.clamp(p[0], 0.5, lv.W - 0.5); m.fty = ZM.clamp(p[1], 0.5, lv.H - 0.5);
+      }
+    }
+
+    formationTarget(m) {
+      m.tx = m.ftx; m.ty = m.fty;
       return true;
     }
 

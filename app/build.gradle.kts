@@ -71,8 +71,8 @@ android {
         applicationId = "com.butterschnitzel.zenmower"
         minSdk = 24
         targetSdk = 36
-        versionCode = 5
-        versionName = "1.3.1"
+        versionCode = 6
+        versionName = "1.3.2"
 
         manifestPlaceholders["admobAppId"] = admobAppId
 
