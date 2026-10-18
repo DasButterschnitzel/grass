@@ -13,7 +13,7 @@ P = dict(
     # upgrades: base, growth, max  (same numbers as js/economy.js)
     blade=(15, 2.3, 45), engine=(12, 2.3, 45), fert=(25, 2.2, 10**9), sprinkler=(20, 2.55, 40),
     # lawns
-    vm=6.0, c0=5300.0, a=0.85, b=2.2, c=3.3, rinf=0.98,
+    vm=6.0, c0=4600.0, a=0.85, b=2.2, c=3.3, rinf=0.98, area=1.6,
     spend=0.2,      # buy upgrades while cheaper than this fraction of the next lawn
     round_bonus=0.5,
 )
@@ -37,7 +37,7 @@ def lawn_cost(N):
     c = P['c0']
     for k in range(1, N):
         c *= P['vm'] * P['rinf'] * (1 + P['a'] / k + P['b'] * math.exp(-(k - 1) / P['c']))
-    return c
+    return c * (width(N) / min(60, 34 + 2 * (N - 1))) ** P['area']
 
 
 COSTS = {}
@@ -53,7 +53,7 @@ def fleet_unlock(lvl):
 
 
 def width(N):
-    return min(60, 34 + 2 * (N - 1))
+    return min(100, 34 + 4 * (N - 1))
 
 
 def up_cost(k, l):

@@ -82,7 +82,10 @@
       this.fxTex = glw.texture(lv.W, lv.H, field.fx, true);
       // blade instances sorted by root y so lower blades overlap upper tips
       const W = lv.W, H = lv.H;
-      const per = W <= 42 ? 4 : W <= 52 ? 3 : 3;
+      // big lawns: fewer but larger blades per cell, so the grass looks just as lush on
+      // screen and the GPU draws about as many blades as on a small lawn
+      const per = W <= 44 ? 4 : W <= 60 ? 3 : W <= 84 ? 2 : 1;
+      this.bladeScale = Math.max(1, Math.min(2.3, Math.pow(W / 42, 0.9)));
       const r = ZM.rng(lv.seed);
       const list = [];
       for (let cy = 0; cy < H; cy++) for (let cx = 0; cx < W; cx++) {
@@ -98,7 +101,7 @@
       list.forEach((v, i) => inst.set(v, i * 6));
       this.bladeInst = glw.buffer(inst);
       this.bladeCount = list.length;
-      this.bladeW = per === 4 ? 0.2 : 0.23;
+      this.bladeW = (per === 4 ? 0.2 : 0.23) * this.bladeScale;
     }
 
     uploadField() {
@@ -189,7 +192,7 @@
       gl.uniform3fv(P.u.u_cutA, biome.cut[0]);
       gl.uniform3fv(P.u.u_cutB, biome.cut[1]);
       gl.uniform3fv(P.u.u_gold, biome.gold);
-      gl.uniform1f(P.u.u_bladeH, 1.85);
+      gl.uniform1f(P.u.u_bladeH, 1.85 * this.bladeScale);
       gl.uniform1f(P.u.u_bladeW, this.bladeW);
       gl.uniform1f(P.u.u_grow, game.grow);
       gl.uniform1f(P.u.u_hint, game.hint);

@@ -112,6 +112,7 @@
     ZM.ui = ui;
     const zen = new ZM.Zen(game, ui);
     ZM.zen = zen;
+    game.playRect = ui.playRect(); // the lawn takes the shape of the play area
     game.startLevel(save.level, true);
     setLoad(1);
 

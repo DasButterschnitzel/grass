@@ -152,6 +152,7 @@
       this.nextStepT += step8;
     }
     this.scheduleAmbience(now);
+    this.tickBeds(now);
     if (this.live.length > 40) this.live = this.live.filter((n) => n.t > now - 5);
   };
 

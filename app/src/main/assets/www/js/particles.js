@@ -11,6 +11,7 @@
   class Particles {
     constructor() {
       this.n = 0;
+      this.vis = 1; // world units per "normal" cell: big lawns are seen from further away
       const f = () => new Float32Array(MAX);
       this.x = f(); this.y = f(); this.vx = f(); this.vy = f();
       this.life = f(); this.max = f(); this.s0 = f(); this.s1 = f();
@@ -23,8 +24,9 @@
       if (this.n >= MAX) return;
       const i = this.n++;
       this.spr[i] = typeof spr === 'number' ? spr : SPR_INDEX[spr];
-      this.x[i] = x; this.y[i] = y; this.vx[i] = vx; this.vy[i] = vy;
-      this.life[i] = life; this.max[i] = life; this.s0[i] = s0; this.s1[i] = s1;
+      const v = this.vis;
+      this.x[i] = x; this.y[i] = y; this.vx[i] = vx * v; this.vy[i] = vy * v;
+      this.life[i] = life; this.max[i] = life; this.s0[i] = s0 * v; this.s1[i] = s1 * v;
       this.rot[i] = rot; this.vr[i] = vr;
       this.r[i] = c[0]; this.g[i] = c[1]; this.b[i] = c[2]; this.a[i] = a;
       this.flags[i] = flags || 0; this.drag[i] = drag === undefined ? 2.5 : drag;
@@ -38,8 +40,8 @@
         const fl = this.flags[i];
         const k = Math.exp(-this.drag[i] * dt);
         let vx = this.vx[i] * k, vy = this.vy[i] * k;
-        if (fl & F_GRAV) vy += 3.0 * dt;
-        if (fl & F_FLUTTER) { vx += Math.sin(t * 2.3 + this.ph[i]) * 1.6 * dt; }
+        if (fl & F_GRAV) vy += 3.0 * this.vis * dt;
+        if (fl & F_FLUTTER) { vx += Math.sin(t * 2.3 + this.ph[i]) * 1.6 * this.vis * dt; }
         if (w !== i) {
           this.spr[w] = this.spr[i]; this.flags[w] = fl;
           this.max[w] = this.max[i]; this.s0[w] = this.s0[i]; this.s1[w] = this.s1[i];

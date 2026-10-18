@@ -83,33 +83,43 @@
   };
   const ORDER = ['meadow', 'oval', 'heart', 'clover', 'pill', 'wave', 'hex', 'peanut', 'diamond', 'cross', 'ring', 'blob', 'star', 'steps'];
 
-  // opts (zen gardens): { W, H, shape, biome, maxL, thick, pond, stones, flowers }
+  // Game lawns: opts { aspect } – the lawn takes the shape of the play area (same area as a
+  // 1.6 tall lawn of the level's width), so it fills the screen on every phone.
+  // Zen gardens: opts { zen: true, W, H, shape, biome, maxL, thick, pond, stones, flowers }.
   ZM.generateLevel = function (N, opts) {
     const o = opts || {};
+    const zen = !!o.zen;
     const rnd = ZM.rng(0x9E3779B1 ^ (N * 2654435761));
-    const W = o.W || ZM.levelWidth(N);
-    const H = o.H || Math.round(W * 1.6);
+    const AC = 1.6; // the game's shapes are drawn for this aspect
+    let W, H;
+    if (o.W) { W = o.W; H = o.H || Math.round(W * AC); }
+    else {
+      const asp = ZM.clamp(o.aspect || AC, 1.05, 2.0);
+      W = Math.round(ZM.levelWidth(N) * Math.sqrt(AC / asp)); H = Math.round(W * asp);
+    }
     const A = H / W; // aspect in normalized units
-    const S = 4; // terrain texels per cell
+    const DA = zen ? A : AC; // design aspect: shapes and obstacles are placed in this space …
+    const ky = DA / A, ks = Math.min(1, A / DA); // … and squeezed / stretched to the real one
+    const S = W <= 64 ? 4 : 3; // terrain texels per cell
     const TW = W * S, TH = H * S;
     const shapeName = o.shape || (N <= ORDER.length ? ORDER[N - 1] : ORDER[Math.floor(rnd() * ORDER.length)]);
-    const land = SHAPES[shapeName](rnd, A);
+    const land0 = SHAPES[shapeName](rnd, DA);
+    const land = ky === 1 ? land0 : (x, y) => land0(x, y * ky) * ks;
 
     // Obstacles: ponds, stepping stones, rocks and flower beds – more as levels go on.
     const ponds = [], rocks = [], beds = [], stones = [];
-    const zen = !!opts;
-    if (shapeName === 'ring') ponds.push({ x: 0, y: 0, a: 0.38, b: 0.62 });
+    if (shapeName === 'ring') ponds.push({ x: 0, y: 0, a: 0.38, b: 0.62, squash: true });
     if (zen ? o.pond : N >= 4 && shapeName !== 'ring' && rnd() < 0.55) {
-      ponds.push(o.pond && o.pond.x !== undefined ? o.pond : { x: rnd.range(-0.45, 0.45), y: rnd.range(-0.9, 0.9), a: rnd.range(0.18, 0.3), b: rnd.range(0.16, 0.26) });
+      ponds.push(o.pond && o.pond.x !== undefined ? Object.assign({}, o.pond) : { x: rnd.range(-0.45, 0.45), y: rnd.range(-0.9, 0.9), a: rnd.range(0.18, 0.3), b: rnd.range(0.16, 0.26) });
     }
     if (zen ? o.stones : N >= 6 && rnd() < 0.5) {
       const vertical = rnd() < 0.6;
-      const ph = rnd() * 6, amp = rnd.range(0.15, 0.35), cnt = vertical ? 15 : 9;
-      const y0 = rnd.range(-0.5, 0.5) * A;
+      const ph = rnd() * 6, amp = rnd.range(0.15, 0.35), cnt = vertical ? Math.round(15 / ky) : 9;
+      const y0 = rnd.range(-0.5, 0.5) * DA;
       for (let i = 0; i < cnt; i++) {
         const t = (i / (cnt - 1)) * 2 - 1;
         const r = rnd.range(0.065, 0.085);
-        if (vertical) stones.push({ x: Math.sin(t * 2.4 + ph) * amp, y: t * A * 0.97, r });
+        if (vertical) stones.push({ x: Math.sin(t * 2.4 + ph) * amp, y: t * DA * 0.97, r });
         else stones.push({ x: t * 0.97, y: y0 + Math.sin(t * 2.2 + ph) * amp, r });
       }
     }
@@ -120,6 +130,9 @@
     if (!zen && N >= 8 && rnd() < 0.45) {
       beds.push({ x: rnd.range(-0.4, 0.4), y: rnd.range(-1.1, 1.1), w: rnd.range(0.22, 0.34), h: rnd.range(0.09, 0.13) });
     }
+    // obstacles move with the squeezed shape but keep their own proportions (round stones
+    // stay round); only the hole of the ring island is squeezed like the island itself
+    for (const list of [ponds, rocks, beds, stones]) for (const ob of list) { ob.y /= ky; if (ob.squash) ob.b /= ky; }
 
     const sdWater = (x, y) => {
       let d = 9;

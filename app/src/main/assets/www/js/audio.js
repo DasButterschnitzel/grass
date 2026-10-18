@@ -9,6 +9,9 @@
   const rnd = (a, b) => a + (b - a) * Math.random();
   const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
   ZM.mtof = mtof;
+  // equal-power cross-fade curves for uncorrelated noise
+  const FADE_IN = new Float32Array(33), FADE_OUT = new Float32Array(33);
+  for (let i = 0; i <= 32; i++) { FADE_IN[i] = Math.sin((i / 32) * Math.PI / 2); FADE_OUT[i] = Math.cos((i / 32) * Math.PI / 2); }
 
   class AudioEngine {
     constructor(settings) {
@@ -20,10 +23,11 @@
       this.biome = null;
       this.muted = false;
       this.mix = { grass: 1, wind: 1, water: 1, life: 1, music: 1 };
-      this.lastPop = 0; this.lastPopNote = 0;
+      this.lastPop = 0; this.lastPopNote = 0; this.bedLevel = 0;
       this.lastUpg = -1; this.upgRun = 0;
       this.live = [];
       this.voices = [];
+      this.beds = [];
     }
 
     unlock() {
@@ -39,16 +43,17 @@
       const ctx = new AC({ latencyHint: 'playback' });
       this.ctx = ctx;
       this.sr = ctx.sampleRate;
-      // master chain: gentle top-end taming → glue compressor → safety limiter
+      // master chain: gentle top-end taming → glue compressor → safety limiter. The glue is
+      // slow and soft on purpose: a fast one makes the wind "breathe" with every grass crunch.
       this.out = ctx.createGain();
       this.master = ctx.createGain();
       this.master.gain.value = 0.9;
       const shelf = ctx.createBiquadFilter();
-      shelf.type = 'highshelf'; shelf.frequency.value = 8500; shelf.gain.value = -2.5;
+      shelf.type = 'highshelf'; shelf.frequency.value = 7500; shelf.gain.value = -2.5;
       const sub = ctx.createBiquadFilter(); // no rumble below what anyone can hear
       sub.type = 'highpass'; sub.frequency.value = 38; sub.Q.value = 0.6;
       const glue = ctx.createDynamicsCompressor();
-      glue.threshold.value = -16; glue.knee.value = 10; glue.ratio.value = 3; glue.attack.value = 0.006; glue.release.value = 0.3;
+      glue.threshold.value = -18; glue.knee.value = 12; glue.ratio.value = 2; glue.attack.value = 0.025; glue.release.value = 0.5;
       const lim = ctx.createDynamicsCompressor();
       lim.threshold.value = -2.5; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.002; lim.release.value = 0.12;
       this.master.connect(sub); sub.connect(shelf); shelf.connect(glue); glue.connect(lim); lim.connect(this.out); this.out.connect(ctx.destination);
@@ -70,12 +75,14 @@
       this.windBus = ctx.createGain(); this.windBus.connect(this.amb);
       this.waterBus = ctx.createGain(); this.waterBus.connect(this.amb);
       this.lifeBus = ctx.createGain(); this.lifeBus.connect(this.amb);
-      // grass bus: a little warmth, soft top end
+      // grass bus: warmth, a dip where small speakers (and ears) are most sensitive, soft top
       this.grassBus = ctx.createBiquadFilter();
-      this.grassBus.type = 'lowshelf'; this.grassBus.frequency.value = 400; this.grassBus.gain.value = 3;
+      this.grassBus.type = 'lowshelf'; this.grassBus.frequency.value = 450; this.grassBus.gain.value = 3.5;
+      const grassDip = ctx.createBiquadFilter();
+      grassDip.type = 'peaking'; grassDip.frequency.value = 3300; grassDip.Q.value = 0.8; grassDip.gain.value = -3;
       const grassHi = ctx.createBiquadFilter();
-      grassHi.type = 'lowpass'; grassHi.frequency.value = 7600; grassHi.Q.value = 0.5;
-      this.grassBus.connect(grassHi); grassHi.connect(this.grassGain);
+      grassHi.type = 'lowpass'; grassHi.frequency.value = 6000; grassHi.Q.value = 0.5;
+      this.grassBus.connect(grassDip); grassDip.connect(grassHi); grassHi.connect(this.grassGain);
 
       // Every channel has a reverb send AFTER its volume, so turning a slider down also
       // silences the echo of that channel (in 1.1 the reverb bypassed the sliders).
@@ -177,8 +184,11 @@
         d[i] = v;
         peak = Math.max(peak, Math.abs(v));
       }
-      const g = 0.9 / (peak || 1);
-      const fo = Math.min(d.length, Math.floor(0.003 * sr));
+      // same energy for every grain (not the same peak), so no single grain jumps out
+      let e = 0;
+      for (let i = 0; i < d.length; i++) e += d[i] * d[i];
+      const g = Math.min(Math.sqrt((0.09 * 0.03 * sr) / (e || 1)), 0.95 / (peak || 1));
+      const fo = Math.min(d.length, Math.floor(0.004 * sr));
       for (let i = 0; i < d.length; i++) d[i] *= g * (i > d.length - fo ? (d.length - i) / fo : 1);
       return b;
     }
@@ -212,37 +222,40 @@
     }
 
     buildBuffers() {
-      // grass grains: snips (crisp), rustles (airy), crunches (thick grass)
+      // grass grains: snips (crisp), rustles (airy), crunches (thick grass). Soft and warm –
+      // most of the energy between 300 Hz and 3 kHz, attacks of a few ms instead of clicks,
+      // no crackle (1.3 had 88 % of its energy above 1 kHz and 40 % above 4 kHz: a sizzle).
       this.snips = [];
-      for (let k = 0; k < 10; k++) this.snips.push(this.grain(rnd(9, 18), rnd(2800, 5200), rnd(1.0, 1.6), rnd(0.3, 0.8), rnd(2.2, 5), 0.002, { fc: 1200, mix: 0.3 }));
+      for (let k = 0; k < 10; k++) this.snips.push(this.grain(rnd(14, 26), rnd(1800, 3000), rnd(0.9, 1.3), rnd(1.2, 2.4), rnd(4, 8), 0, { fc: rnd(700, 1000), mix: 0.55 }));
       this.rustles = [];
-      for (let k = 0; k < 10; k++) this.rustles.push(this.grain(rnd(30, 70), rnd(1500, 3400), rnd(0.6, 1.1), rnd(2, 6), rnd(8, 18), 0.004, { fc: 800, mix: 0.4 }));
+      for (let k = 0; k < 10; k++) this.rustles.push(this.grain(rnd(45, 90), rnd(1100, 2200), rnd(0.6, 0.9), rnd(4, 9), rnd(12, 24), 0.001, { fc: rnd(450, 700), mix: 0.55 }));
       this.crunches = [];
-      for (let k = 0; k < 10; k++) this.crunches.push(this.grain(rnd(22, 45), rnd(1100, 2400), rnd(0.8, 1.5), rnd(0.5, 1.2), rnd(5, 12), 0.03, { fc: rnd(350, 650), mix: 0.85 }));
+      for (let k = 0; k < 10; k++) this.crunches.push(this.grain(rnd(30, 60), rnd(650, 1400), rnd(0.8, 1.2), rnd(1.5, 3), rnd(8, 16), 0.006, { fc: rnd(230, 420), mix: 0.9 }));
 
-      // continuous rustle bed (seamless loop): dense micro-grains of band-limited noise
+      // continuous rustle bed: soft band-limited noise with a slow, uneven texture. It is
+      // played as random cross-faded stretches (see bed()), so it never forms a pattern.
       {
-        const sec = 2.6, b = this.buf(sec), d = b.getChannelData(0), sr = this.sr, n = d.length;
-        let low = 0, band = 0;
-        const f = 2 * Math.sin((Math.PI * 2500) / sr);
-        let env = 0, envT = 0;
+        const sec = 8, b = this.buf(sec), d = b.getChannelData(0), sr = this.sr, n = d.length;
+        let low = 0, band = 0, env = 0.6, envT = 0, envTarget = 0.6;
+        const f = 2 * Math.sin((Math.PI * 1500) / sr);
+        let pk = 0;
         for (let i = 0; i < n; i++) {
-          if (--envT <= 0) { envT = Math.floor(rnd(0.004, 0.03) * sr); env = rnd(0.2, 1); }
+          if (--envT <= 0) { envT = Math.floor(rnd(0.01, 0.05) * sr); envTarget = rnd(0.35, 1); }
+          env += (envTarget - env) * 0.002;
           const x = Math.random() * 2 - 1;
-          const high = x - low - 1.3 * band; band += f * high; low += f * band;
-          d[i] = band * (0.35 + 0.65 * env);
+          const high = x - low - 1.6 * band; band += f * high; low += f * band;
+          d[i] = (band * 0.8 + low * 0.22) * env;
+          pk = Math.max(pk, Math.abs(d[i]));
         }
-        const xf = Math.floor(0.08 * sr);
-        for (let i = 0; i < xf; i++) { const a = i / xf; d[i] = d[i] * a + d[n - xf + i] * (1 - a); }
-        let pk = 0; for (let i = 0; i < n - xf; i++) pk = Math.max(pk, Math.abs(d[i]));
         for (let i = 0; i < n; i++) d[i] *= 0.8 / pk;
-        this.rustleBuf = this.trim(b, n - xf);
+        this.rustleBuf = b;
       }
 
+      // long noise sources (all continuous layers play random stretches of them)
       const half = Math.max(22050, Math.round(this.sr / 2));
-      this.brown = this.noiseLoop('brown', 6, 1, half);
-      this.pink = this.noiseLoop('pink', 5, 2);
-      this.white = this.noiseLoop('white', 3, 1);
+      this.brown = this.noiseLoop('brown', 10, 1, half);
+      this.pink = this.noiseLoop('pink', 8, 2, half);
+      this.white = this.noiseLoop('white', 4, 1);
 
       // instruments – all harmonic, so the key decides everything
       this.pluckBuf = this.makePluck(72, 2.4, 0.9965, 0.5);   // kalimba, C5
@@ -351,29 +364,56 @@
       return src;
     }
 
+    // ------------------------------------------------------------ never-repeating noise
+    // A continuous noise layer made of random stretches of a buffer, cross-faded with equal
+    // power. A plain looped buffer is heard as a pattern after a few rounds (1.3: grass
+    // every 2.5 s, wind every 8.2 s, rain every 9 s); this never repeats.
+    bed(buffer, dest, opts) {
+      const o = opts || {};
+      const b = { buffer, dest, rate: o.rate || 1, seg: o.seg || [2.2, 4.2], xf: o.xf || 0.9, next: 0, cur: null, dead: false };
+      this.beds.push(b);
+      this.tickBed(b, this.ctx.currentTime);
+      return b;
+    }
+    tickBed(b, now) {
+      if (b.dead || now + 0.35 < b.next) return;
+      const ctx = this.ctx, t = Math.max(now + 0.05, b.next);
+      const src = ctx.createBufferSource(); src.buffer = b.buffer; src.loop = true; src.playbackRate.value = b.rate;
+      const g = ctx.createGain(); g.gain.value = 0;
+      src.connect(g); g.connect(b.dest);
+      g.gain.setValueAtTime(0, t); g.gain.setValueCurveAtTime(b.cur ? FADE_IN : FADE_IN.map((v) => v * v), t, b.xf);
+      src.start(t, Math.random() * b.buffer.duration);
+      // the old stretch only fades out once its successor is running – if the timer stalls,
+      // the current one simply keeps playing (no gap)
+      if (b.cur) { const c = b.cur; c.g.gain.setValueCurveAtTime(FADE_OUT, t, b.xf); c.src.stop(t + b.xf + 0.05); }
+      b.cur = { src, g };
+      b.next = t + rnd(b.seg[0], b.seg[1]);
+    }
+    stopBed(b, t) {
+      if (!b || b.dead) return;
+      b.dead = true;
+      if (b.cur) { try { b.cur.src.stop(t); } catch (e) { /* already stopped */ } }
+      this.beds = this.beds.filter((x) => x !== b);
+    }
+    tickBeds(now) { for (const b of this.beds) this.tickBed(b, now); }
+
     // ------------------------------------------------------------ continuous grass layers
     startLoops() {
       const ctx = this.ctx;
       // rustle bed
-      const r = ctx.createBufferSource(); r.buffer = this.rustleBuf; r.loop = true;
       this.rustleGain = ctx.createGain(); this.rustleGain.gain.value = 0;
       const rp = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain();
       this.rustlePan = rp;
-      r.connect(this.rustleGain); this.rustleGain.connect(rp); rp.connect(this.grassBus);
-      r.start();
+      this.rustleGain.connect(rp); rp.connect(this.grassBus);
+      this.bed(this.rustleBuf, this.rustleGain, { seg: [1.6, 3.2], xf: 0.6 });
 
-      // blade swish: soft, unpitched air from the spinning blade (no motor hum)
-      const w = ctx.createBufferSource(); w.buffer = this.brown; w.loop = true;
+      // blade swish: soft, unpitched air from the spinning blade. No tremolo – a fast
+      // flutter (1.3: 7–13 Hz) makes a constant noise annoying; it only follows the speed.
       const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 420; bp.Q.value = 0.6;
       this.whirrFilter = bp;
-      const am = ctx.createGain(); am.gain.value = 0.85;
-      const lfo = ctx.createOscillator(); lfo.frequency.value = 9;
-      const lfoAmt = ctx.createGain(); lfoAmt.gain.value = 0.15;
-      lfo.connect(lfoAmt); lfoAmt.connect(am.gain); lfo.start();
-      this.whirrLfo = lfo;
       this.whirrGain = ctx.createGain(); this.whirrGain.gain.value = 0;
-      w.connect(bp); bp.connect(am); am.connect(this.whirrGain); this.whirrGain.connect(this.grassGain);
-      w.start();
+      bp.connect(this.whirrGain); this.whirrGain.connect(this.grassGain);
+      this.bed(this.brown, bp, { seg: [3, 5], xf: 1.2 });
     }
 
     // ------------------------------------------------------------ game hooks
@@ -386,24 +426,26 @@
       const lvl = Math.min(1, this.rate / 110);
       this.mowLevel += (lvl - this.mowLevel) * (1 - Math.exp(-dt * (lvl > this.mowLevel ? 6 : 1.5)));
       if (n > 0) { this.lastCutT = now; this.mowPan += (pan - this.mowPan) * Math.min(1, dt * 4); }
-      const target = Math.min(1, this.rate / 160) * 0.42;
-      this.rustleGain.gain.setTargetAtTime(target, now, target > 0.01 ? 0.04 : 0.12);
-      if (this.rustlePan.pan) this.rustlePan.pan.setTargetAtTime(pan * 0.6, now, 0.1);
+      // the bed swells in and out smoothly (a fast follower chops it into a "frying" noise)
+      const target = Math.min(1, this.rate / 160) * 0.4;
+      this.rustleGain.gain.setTargetAtTime(target, now, target > this.bedLevel ? 0.09 : 0.25);
+      this.bedLevel = target;
+      if (this.rustlePan.pan) this.rustlePan.pan.setTargetAtTime(pan * 0.6, now, 0.15);
       if (n <= 0) return;
       // more mowers → a denser, richer crunch, but not a louder one
-      const gps = Math.min(48, 9 + this.rate * 0.35);
-      const norm = Math.sqrt(22 / Math.max(22, gps));
-      this.grainBudget = Math.min(6, this.grainBudget + gps * dt);
+      const gps = Math.min(34, 8 + this.rate * 0.3);
+      const norm = Math.sqrt(20 / Math.max(20, gps));
+      this.grainBudget = Math.min(5, this.grainBudget + gps * dt);
       while (this.grainBudget >= 1) {
         this.grainBudget -= 1;
         const th = ZM.clamp((thick - 1) / 3, 0, 1);
         const r = Math.random();
         let set, gain;
-        if (r < 0.45 - th * 0.2) { set = this.snips; gain = rnd(0.25, 0.48); }
-        else if (r < 0.75) { set = this.rustles; gain = rnd(0.2, 0.42); }
-        else { set = this.crunches; gain = rnd(0.25, 0.5) * (0.6 + th * 0.6); }
+        if (r < 0.3 - th * 0.12) { set = this.snips; gain = rnd(0.34, 0.5); }
+        else if (r < 0.7) { set = this.rustles; gain = rnd(0.34, 0.5); }
+        else { set = this.crunches; gain = rnd(0.36, 0.52) * (0.75 + th * 0.4); }
         this.play(set[(Math.random() * set.length) | 0], {
-          bus: this.grassBus, gain: gain * 0.9 * norm, rate: rnd(0.85, 1.28) - th * 0.12, pan: pan * 0.7 + rnd(-0.25, 0.25), when: now + Math.random() * 0.03,
+          bus: this.grassBus, gain: gain * 0.9 * norm, rate: rnd(0.9, 1.14) - th * 0.08, pan: pan * 0.7 + rnd(-0.22, 0.22), when: now + Math.random() * 0.035,
         });
       }
     }
@@ -411,10 +453,9 @@
     motor(speed01, count) {
       if (!this.ok()) return;
       const now = this.ctx.currentTime;
-      const g = (0.01 + speed01 * 0.04) * Math.min(1.6, 0.8 + count * 0.2);
-      this.whirrGain.gain.setTargetAtTime(g, now, 0.2);
-      this.whirrFilter.frequency.setTargetAtTime(330 + speed01 * 260, now, 0.3);
-      this.whirrLfo.frequency.setTargetAtTime(7 + speed01 * 6, now, 0.3);
+      const g = (0.008 + speed01 * 0.032) * Math.min(1.5, 0.8 + count * 0.18);
+      this.whirrGain.gain.setTargetAtTime(g, now, 0.35);
+      this.whirrFilter.frequency.setTargetAtTime(300 + speed01 * 220, now, 0.5);
       this.mowers = count;
     }
 

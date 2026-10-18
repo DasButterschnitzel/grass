@@ -22,8 +22,9 @@
     }
   }
 
-  // V formation behind the leader, in blade radii: (sideways, backwards)
-  const SLOTS = [[-1.6, 0.9], [1.6, 0.9], [-3.2, 1.8]];
+  // V formation behind the leader, in blade radii: (sideways, backwards). The swaths just
+  // touch – side by side like a gang mower, no wasted overlap and no clumping.
+  const SLOTS = [[-1.95, 1.1], [1.95, 1.1], [-3.9, 2.2]];
   const ROUND_DONE = 0.98;   // share of the lawn that counts as "mowed everything"
   const HAPTIC_STEP = 3.5;   // grass layers cut per vibration tick
 
@@ -48,6 +49,7 @@
       this.frenzyT = 0;
       this.autoT = 0;
       this.autoAll = false; // QA hook: let the autopilot steer all the time
+      this.vis = 1;
       this.rounds = 0; this.roundEarned = 0; this.roundStep = 0; this.roundStart = 0;
       this.hintT = 0; this.hintSpots = [];
       this.hapAcc = 0; this.lastHap = 0;
@@ -94,11 +96,16 @@
       this.mode = 'game';
       this.weather = null;
       this.stats = ZM.stats(save.upg);
-      this.level = ZM.generateLevel(N);
+      // the lawn takes the shape of the play area; a restored lawn keeps the shape it had
+      const pr = this.playRect, snap = restore && save.field && save.field.level === N ? save.field : null;
+      const aspect = snap && snap.aspect ? snap.aspect : Math.round((pr.h / Math.max(1, pr.w)) * 20) / 20;
+      this.level = ZM.generateLevel(N, { aspect });
+      this.lawnAspect = aspect;
+      this.setVis();
       let q = null, type = null;
-      if (restore && save.field && save.field.level === N && save.field.q) {
-        q = ZM.Field.decode(save.field.q);
-        type = ZM.Field.decode(save.field.type);
+      if (snap && snap.q) {
+        q = ZM.Field.decode(snap.q);
+        type = ZM.Field.decode(snap.type);
       }
       this.field = new ZM.Field(this.level, q, type);
       this.biome = this.level.biome;
@@ -133,7 +140,8 @@
       this.weather = scene.weather || null;
       this.stats = ZM.zenStats();
       const pr = this.playRect, asp = ZM.clamp(pr.h / Math.max(1, pr.w), 1.45, 2.3);
-      this.level = ZM.generateLevel(900 + scene.index, Object.assign({}, scene.lawn, { H: Math.round(scene.lawn.W * asp) }));
+      this.level = ZM.generateLevel(900 + scene.index, Object.assign({}, scene.lawn, { zen: true, H: Math.round(scene.lawn.W * asp) }));
+      this.setVis();
       this.field = new ZM.Field(this.level, null, null);
       this.biome = this.level.biome;
       this.state = 'growing';
@@ -173,6 +181,14 @@
       return true;
     }
 
+    // Big lawns are shown "from further away": blades, particles, butterflies and pick-ups
+    // grow with this factor so they look the same on screen, and the mowers drive a bit
+    // faster (in cells) so steering feels just as quick.
+    setVis() {
+      this.vis = Math.max(1, Math.min(2.3, Math.pow(this.level.W / 42, 0.9)));
+      this.particles.vis = this.vis;
+    }
+
     // ---------------------------------------------------------------- autopilot (timed bonus)
     get autoReadyIn() { return Math.max(0, ((this.save.autoReadyAt || 0) - Date.now()) / 1000); }
     activateAuto(free) {
@@ -190,7 +206,7 @@
     saveFieldSnapshot() {
       if (!this.field || this.mode === 'zen') return;
       const s = this.field.serialize();
-      this.save.field = { level: this.level.N, q: s.q, type: s.type };
+      this.save.field = { level: this.level.N, q: s.q, type: s.type, aspect: this.lawnAspect };
     }
 
     placeMowers() {
@@ -424,7 +440,7 @@
 
     moveMower(m, dt) {
       const st = this.stats, lv = this.level;
-      let maxSpd = st.speed * (this.frenzyT > 0 ? 1.2 : 1);
+      let maxSpd = st.speed * Math.pow(this.vis || 1, 0.6) * (this.frenzyT > 0 ? 1.2 : 1);
       let hasT = m.pointer !== null && m.hasTarget;
       if (this.mode === 'zen') {
         if (!hasT && this.zenAuto) { hasT = this.laneTarget(m); maxSpd *= 0.62; }
@@ -471,10 +487,18 @@
       let k = 0;
       for (const o of this.mowers) { if (o === m) break; if (o !== L && o.pointer === null) k++; }
       const slot = SLOTS[Math.min(k, SLOTS.length - 1)];
-      const R = this.stats.radius, a = L.angle;
+      const R = this.stats.radius, a = L.angle, lv = this.level, grass = this.field.grass;
       const fx = Math.sin(a), fy = -Math.cos(a), rx = Math.cos(a), ry = Math.sin(a);
-      m.tx = ZM.clamp(L.x + rx * slot[0] * R - fx * slot[1] * R, 0.5, this.level.W - 0.5);
-      m.ty = ZM.clamp(L.y + ry * slot[0] * R - fy * slot[1] * R, 0.5, this.level.H - 0.5);
+      // a slot that would put the mower off the lawn moves to the other side, closer in, or
+      // right behind the leader – nobody drives around next to the grass
+      const at = (sx, sy) => {
+        const x = L.x + rx * sx * R - fx * sy * R, y = L.y + ry * sx * R - fy * sy * R;
+        const ix = Math.floor(x), iy = Math.floor(y);
+        return ix >= 0 && iy >= 0 && ix < lv.W && iy < lv.H && grass[iy * lv.W + ix] ? [x, y] : null;
+      };
+      const p = at(slot[0], slot[1]) || at(-slot[0], slot[1]) || at(slot[0] * 0.5, slot[1]) || at(0, slot[1] + 1.2) || at(0, 1.2) || [L.x, L.y];
+      m.tx = ZM.clamp(p[0], 0.5, lv.W - 0.5);
+      m.ty = ZM.clamp(p[1], 0.5, lv.H - 0.5);
       return true;
     }
 
@@ -675,10 +699,10 @@
       const c = this.randomTallCell(this.stats.radius + 8);
       this.nextGold = this.time + ZM.rand(18, 34);
       if (c < 0) return;
-      const r = ZM.rand(1.4, 2.3);
+      const r = ZM.rand(1.4, 2.3) * this.vis, RR = Math.ceil(r);
       const cx = c % W, cy = (c / W) | 0;
       const cells = [];
-      for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
+      for (let dy = -RR; dy <= RR; dy++) for (let dx = -RR; dx <= RR; dx++) {
         const x = cx + dx, y = cy + dy;
         if (x < 0 || y < 0 || x >= W || y >= H || dx * dx + dy * dy > r * r) continue;
         const j = y * W + x;
@@ -785,7 +809,8 @@
     }
 
     spawnButterfly(x, y, c) {
-      this.butterflies.push({ x, y, vx: ZM.rand(-2, 2), vy: ZM.rand(-3, -1), c, ph: Math.random() * 6, life: ZM.rand(6, 11), s: ZM.rand(1.4, 2.0), seed: Math.random() * 100 });
+      const v = this.vis || 1;
+      this.butterflies.push({ x, y, vx: ZM.rand(-2, 2) * v, vy: ZM.rand(-3, -1) * v, c, ph: Math.random() * 6, life: ZM.rand(6, 11), s: ZM.rand(1.4, 2.0) * v, seed: Math.random() * 100 });
     }
 
     updateButterflies(dt) {
@@ -794,10 +819,11 @@
       for (const b of this.butterflies) {
         b.life -= dt;
         b.ph += dt * 14;
-        b.vx += Math.sin(t * 1.3 + b.seed) * 6 * dt;
-        b.vy += Math.cos(t * 1.1 + b.seed * 1.7) * 6 * dt - 0.6 * dt;
+        const v = this.vis || 1;
+        b.vx += Math.sin(t * 1.3 + b.seed) * 6 * v * dt;
+        b.vy += (Math.cos(t * 1.1 + b.seed * 1.7) * 6 - 0.6) * v * dt;
         const sp = Math.hypot(b.vx, b.vy);
-        if (sp > 4) { b.vx *= 4 / sp; b.vy *= 4 / sp; }
+        if (sp > 4 * v) { b.vx *= (4 * v) / sp; b.vy *= (4 * v) / sp; }
         b.x += b.vx * dt; b.y += b.vy * dt;
         if (b.life > 0) this.butterflies[w++] = b;
       }
@@ -872,7 +898,7 @@
         if (typ < 3) continue;
         const x = (i % lv.W) + 0.5, y = ((i / lv.W) | 0) + 0.5;
         const bob = Math.sin(t * 2 + i) * 0.08;
-        ub.push(x, y + bob, 2.0, 2.0, 0, typ === 3 ? S.gem : S.clover, 1, 1, 1, 1);
+        ub.push(x, y + bob, 2.0 * this.vis, 2.0 * this.vis, 0, typ === 3 ? S.gem : S.clover, 1, 1, 1, 1);
         if (Math.sin(t * 2.6 + i * 1.7) > 0.8) ab.push(x + 0.3, y - 1.2, 1.7, 1.7, t, S.spark, 1, 1, 1, 0.85);
       }
       // flowers bloom on top of the grass once it has grown back
@@ -881,12 +907,14 @@
         if (g < 0.6) continue;
         const k = ZM.smoothstep(0.6, 0.85, g);
         const sway = Math.sin(t * 1.6 + d.x * 0.3) * 0.12;
-        nb.push(d.x + sway * 0.4, d.y - 0.35, 1.3 * d.s * k, 1.3 * d.s * k, d.rot + sway, S.petals, d.c[0], d.c[1], d.c[2], 1);
-        nb.push(d.x + sway * 0.4, d.y - 0.35, 1.3 * d.s * k, 1.3 * d.s * k, 0, S.fcenter, 1, 1, 1, 1);
+        const fs = 1.3 * d.s * k * Math.pow(this.vis, 0.8);
+        nb.push(d.x + sway * 0.4, d.y - 0.35, fs, fs, d.rot + sway, S.petals, d.c[0], d.c[1], d.c[2], 1);
+        nb.push(d.x + sway * 0.4, d.y - 0.35, fs, fs, 0, S.fcenter, 1, 1, 1, 1);
       }
       for (const d of this.bedDecor) {
-        nb.push(d.x, d.y, 1.1 * d.s, 1.1 * d.s, d.rot, S.petals, d.c[0], d.c[1], d.c[2], 1);
-        nb.push(d.x, d.y, 1.1 * d.s, 1.1 * d.s, 0, S.fcenter, 1, 1, 1, 1);
+        const fs = 1.1 * d.s * Math.pow(this.vis, 0.8);
+        nb.push(d.x, d.y, fs, fs, d.rot, S.petals, d.c[0], d.c[1], d.c[2], 1);
+        nb.push(d.x, d.y, fs, fs, 0, S.fcenter, 1, 1, 1, 1);
       }
       // golden patch beacon
       if (this.patch) {

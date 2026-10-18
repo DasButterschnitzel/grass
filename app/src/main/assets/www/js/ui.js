@@ -296,7 +296,9 @@
         const v = (k) => parseFloat(cs0.getPropertyValue(k)) || 0;
         return { x: v('--sal') + 6, y: v('--sat') + 10, w: window.innerWidth - v('--sal') - v('--sar') - 12, h: window.innerHeight - v('--sat') - v('--sab') - 20 };
       }
-      const top = $('actions').getBoundingClientRect().bottom + 6;
+      // the lawn starts below the round pill, so the pill never hides grass or a mower
+      const pill = $('roundPill').getBoundingClientRect();
+      const top = Math.max($('actions').getBoundingClientRect().bottom + 6, pill.height > 0 ? pill.bottom + 4 : 0);
       const cards = $('upgrades').getBoundingClientRect();
       const bottom = cards.top + 10;
       const cs = getComputedStyle(document.documentElement);

@@ -67,17 +67,22 @@
   // steep (your mower is still growing fast) and eases towards the value growth.
   const E = window.__econ || {}; // test-only overrides for the balancing bot
   ZM.LAWN_MULT = E.vm || 6;   // each lawn pays ×6 per blade
-  ZM.LAWN_BASE = E.c0 || 5300;
+  ZM.LAWN_BASE = E.c0 || 4600;
   // (tuned with the real game code: tools/qa/pace.js, ~1.5–2.5 min per lawn early, ~4 later)
   const CR = E.rinf || 0.98, CA = E.a !== undefined ? E.a : 0.85, CB = E.b !== undefined ? E.b : 2.2, CC = E.c || 3.3;
   ZM.lawnValue = (N) => Math.pow(ZM.LAWN_MULT, N - 1);
+  // later lawns are much bigger, so the growing blade and the fleet always have room
+  // (the width of a 1.6 tall lawn; the real lawn takes the shape of the screen, same area)
+  ZM.levelWidth = (N) => Math.min(100, 34 + 4 * (N - 1));
+  // A bigger lawn earns more per minute once you can keep up with it, so its price grows
+  // with its area – relative to the smaller lawns (34 → 60) the curve was first tuned on.
+  const AREA = E.area !== undefined ? E.area : 1.6;
+  const tunedWidth = (N) => Math.min(60, 34 + 2 * (N - 1));
   ZM.lawnCost = (N) => { // price to leave lawn N
     let c = ZM.LAWN_BASE;
     for (let k = 1; k < N; k++) c *= ZM.LAWN_MULT * CR * (1 + CA / k + CB * Math.exp(-(k - 1) / CC));
-    return c;
+    return c * Math.pow(ZM.levelWidth(N) / tunedWidth(N), AREA);
   };
-  // later lawns are bigger, so the mower never outgrows them
-  ZM.levelWidth = (N) => Math.min(60, 34 + 2 * (N - 1));
   ZM.MAX_LAYERS = 4;
   ZM.levelMaxLayers = (N) => Math.min(ZM.MAX_LAYERS, 1 + Math.floor(N / 2));
   ZM.levelThickness = (N) => 1 + Math.min(1.6, 0.3 * (N - 1)); // target average layers

@@ -215,7 +215,7 @@ void main(){
   grow = grow*grow*(3.0-2.0*grow);
   vec3 cutCol = mix(u_cutB, u_cutA, rnd2) * (0.98 + 0.08*rnd);
   if (hgt < 0.1) {
-    h = (0.12 + 0.14*rnd);
+    h = (0.12 + 0.14*rnd) * u_bladeH / 1.85;
     tip = cutCol;
     base = tip * 0.86;
     w *= 0.7;

@@ -13,6 +13,7 @@ Run with `PLAYWRIGHT=/path/to/node_modules/playwright node tools/qa/<script>.js 
 | `multitouch.js <url> <out>` | Two simultaneous CDP touch points → verifies each finger steers its own mower. |
 | `storeshots.js <url> <out>` | Regenerates the 1080×2160 Play Store screenshots. |
 | `audiotest.js <url> out.webm [secs] [lawn] [mow\|pure\|zen:<scene>]` + `analyze.py in.wav spec.png` | Records the live audio mix while mowing (`mow`: golden patch, gem, autopilot, next lawn; `pure`: just mowing) or in a zen scene and reports loudness / spectral balance. `UPG` / `SETTINGS` env vars (JSON) override upgrades and settings, e.g. `SETTINGS='{"melody":"full"}'`. |
+| `noisecheck.py in.wav [t0] [t1]` | Comfort of the noisy layers (grass, wind, rain …): loudness swings, spectral balance and sharpness (acum), flutter/rattle beyond steady noise, clicks per second and audible loops. Record isolated layers with `SETTINGS='{"music":0,"amb":0}'` (grass) or `'{"sfx":0,"music":0}'` (nature). |
 | `klongel.py in.wav [t0] [t1]` | Pitched attacks per second (plucks, bells, chimes) – the "is it tinkling all the time?" check. Pads, beating, noise and steady tones are ignored. |
 | `harmony.py in.wav [0,2,4,7,9]` | Finds the stable tones in a recording and reports energy outside the key, semitone/tritone intervals, roughness and tuning – the "is anything dissonant?" check. |
 

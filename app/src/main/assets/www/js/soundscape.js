@@ -64,34 +64,31 @@
       L.out.gain.setValueAtTime(L.out.gain.value, now);
       L.out.gain.linearRampToValueAtTime(0, now + 1.5);
       for (const s of L.srcs) { try { s.stop(now + 1.6); } catch (err) { /* already stopped */ } }
+      for (const b of L.beds || []) this.stopBed(b, now + 1.6);
       delete this.layers[name];
     }
   };
 
-  P.loopSrc = function (buffer, rate) {
-    const s = this.ctx.createBufferSource();
-    s.buffer = buffer; s.loop = true; s.playbackRate.value = rate || 1;
-    s.start(this.ctx.currentTime, Math.random() * buffer.duration);
-    return s;
-  };
-
+  // Wind: a soft body (no sub rumble – 1.3 had 70 % of the wind's energy below 250 Hz) and
+  // two airy bands left and right that open up with the gusts. All from never-repeating beds.
   P.make_wind = function () {
     const ctx = this.ctx, out = ctx.createGain(); out.connect(this.windBus);
-    const body = this.loopSrc(this.brown, 0.7);
-    const bhp = ctx.createBiquadFilter(); bhp.type = 'highpass'; bhp.frequency.value = 85; bhp.Q.value = 0.5;
-    const blp = ctx.createBiquadFilter(); blp.type = 'lowpass'; blp.frequency.value = 300; blp.Q.value = 0.5;
+    const bhp = ctx.createBiquadFilter(); bhp.type = 'highpass'; bhp.frequency.value = 150; bhp.Q.value = 0.6;
+    const blp = ctx.createBiquadFilter(); blp.type = 'lowpass'; blp.frequency.value = 400; blp.Q.value = 0.5;
     const bg = ctx.createGain(); bg.gain.value = 0;
-    body.connect(bhp); bhp.connect(blp); blp.connect(bg); bg.connect(out);
-    const air = [], srcs = [body];
+    bhp.connect(blp); blp.connect(bg); bg.connect(out);
+    const beds = [this.bed(this.pink, bhp, { rate: 0.8, seg: [3, 5.5], xf: 1.5 })];
+    const air = [];
     for (const side of [-1, 1]) {
-      const src = this.loopSrc(this.pink, side < 0 ? 0.93 : 1.07);
-      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.85; bp.frequency.value = 800;
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.8; bp.frequency.value = 700;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3200; lp.Q.value = 0.5;
       const g = ctx.createGain(); g.gain.value = 0;
       const pan = ctx.createStereoPanner(); pan.pan.value = side * 0.6;
-      src.connect(bp); bp.connect(g); g.connect(pan); pan.connect(out);
-      air.push({ bp, g, side }); srcs.push(src);
+      bp.connect(lp); lp.connect(g); g.connect(pan); pan.connect(out);
+      beds.push(this.bed(this.pink, bp, { rate: side < 0 ? 0.94 : 1.06, seg: [2.5, 4.5], xf: 1.2 }));
+      air.push({ bp, g, side });
     }
-    return { out, srcs, bg, blp, air };
+    return { out, srcs: [], beds, bg, blp, air };
   };
 
   // "Aeolian harp": the wind makes soft tones – a stack of fifths from the key.
@@ -117,23 +114,23 @@
   P.make_rain = function () {
     if (!this.rainBuf) this.rainBuf = this.makeRain(9);
     const ctx = this.ctx, out = ctx.createGain(); out.connect(this.waterBus);
-    const src = this.loopSrc(this.rainBuf);
     const g = ctx.createGain(); g.gain.value = 0.8;
-    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 7000; lp.Q.value = 0.4;
-    src.connect(lp); lp.connect(g); g.connect(out);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 6000; lp.Q.value = 0.4;
+    lp.connect(g); g.connect(out);
     const s = ctx.createGain(); s.gain.value = 0.25; g.connect(s); s.connect(this.waterWet);
-    return { out, srcs: [src], g, lp };
+    const beds = [this.bed(this.rainBuf, lp, { seg: [2.5, 4.5], xf: 1 })];
+    return { out, srcs: [], beds, g, lp };
   };
 
   P.make_brook = function () {
     const root = this.key.root;
     if (!this.brookBuf || this.brookRoot !== root) { this.brookBuf = this.makeBrook(8); this.brookRoot = root; }
     const ctx = this.ctx, out = ctx.createGain(); out.connect(this.waterBus);
-    const src = this.loopSrc(this.brookBuf);
     const g = ctx.createGain(); g.gain.value = 0.7;
-    src.connect(g); g.connect(out);
+    g.connect(out);
     const s = ctx.createGain(); s.gain.value = 0.3; g.connect(s); s.connect(this.waterWet);
-    return { out, srcs: [src], g, root };
+    const beds = [this.bed(this.brookBuf, g, { seg: [2, 4], xf: 0.8 })];
+    return { out, srcs: [], beds, g, root };
   };
 
   // ------------------------------------------------------------ per tick (every 100 ms)
@@ -146,15 +143,15 @@
       this.nextGust = now + rnd(2.5, 6.5) / (0.6 + S.gust * 0.8);
     }
     const prevG = this.gust;
-    this.gust += (this.gustTarget - this.gust) * 0.035;
+    this.gust += (this.gustTarget - this.gust) * 0.026; // ~4 s to swell: a breeze, not a blast
     const g = this.gust;
     const W = this.layers.wind;
     if (W) {
-      W.bg.gain.setTargetAtTime(S.wind * (0.25 + 0.75 * g) * 0.32, now, 0.4);
-      W.blp.frequency.setTargetAtTime(190 + 520 * g, now, 0.5);
+      W.bg.gain.setTargetAtTime(S.wind * (0.35 + 0.65 * g) * 0.26, now, 0.6);
+      W.blp.frequency.setTargetAtTime(320 + 460 * g, now, 0.8);
       for (const a of W.air) {
-        a.g.gain.setTargetAtTime(S.wind * S.air * (0.04 + 0.96 * g * g) * 0.32, now, 0.5);
-        a.bp.frequency.setTargetAtTime((520 + 1500 * g) * (a.side < 0 ? 0.82 : 1.18), now, 0.6);
+        a.g.gain.setTargetAtTime(S.wind * S.air * (0.06 + 0.94 * Math.pow(g, 1.6)) * 0.3, now, 0.7);
+        a.bp.frequency.setTargetAtTime((450 + 950 * g) * (a.side < 0 ? 0.85 : 1.15), now, 0.9);
       }
     }
     const A = this.layers.aeolian;
@@ -167,7 +164,7 @@
     const R = this.layers.rain;
     if (R && now > e.rainMove) {
       R.g.gain.setTargetAtTime(S.rain * rnd(0.75, 1), now, 2.5);
-      R.lp.frequency.setTargetAtTime(rnd(5500, 8000), now, 3);
+      R.lp.frequency.setTargetAtTime(rnd(4800, 6500), now, 3);
       e.rainMove = now + rnd(4, 9);
     }
     const B = this.layers.brook;
@@ -183,10 +180,11 @@
     // while you mow, the grass is the star: chimes wait for a pause (zen scenes excepted)
     const busy = !(this.musicStyle && this.musicStyle.zen) && this.mowLevel > 0.12;
     if (S.chimes > 0 && now > e.chime && g > 0.55 && g > prevG && !busy) { this.windChimes(t); e.chime = now + rnd(5, 14) / S.chimes; }
-    if (S.leaves > 0 && Math.random() < S.leaves * g * 0.9) {
+    // leaves tumbling in the gusts: soft and sparse (1.3: a crackle of 3–4 clicks a second)
+    if (S.leaves > 0 && Math.random() < S.leaves * g * g * 0.45) {
       this.play(this.rustles[(Math.random() * this.rustles.length) | 0], {
-        bus: this.windBus, gain: rnd(0.03, 0.09) * S.leaves, rate: rnd(1.1, 1.7), pan: rnd(-0.85, 0.85),
-        filter: { type: 'highpass', freq: 1100 }, when: now + Math.random() * 0.1, rev: 0.3,
+        bus: this.windBus, gain: rnd(0.025, 0.06) * S.leaves, rate: rnd(1.0, 1.3), pan: rnd(-0.85, 0.85),
+        filter: { type: 'bandpass', freq: rnd(1400, 2400), q: 0.7 }, when: now + Math.random() * 0.1, rev: 0.35,
       });
     }
     for (const c of this.crickets) {
@@ -199,7 +197,7 @@
   P.bird = function (t0) {
     const ctx = this.ctx, k = this.key;
     const dist = Math.random();
-    const out = ctx.createGain(); out.gain.value = 0.03 + 0.04 * (1 - dist);
+    const out = ctx.createGain(); out.gain.value = 0.022 + 0.03 * (1 - dist);
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 7000 - dist * 3000;
     const pan = ctx.createStereoPanner(); pan.pan.value = rnd(-0.85, 0.85);
     out.connect(lp); lp.connect(pan); pan.connect(this.lifeBus);
@@ -407,13 +405,13 @@
       ch[c].set(loopable(d, n, xf));
     }
     // drops: tiny resonant clicks on leaves, a few deeper plops into puddles
-    const drops = Math.floor(sec * 75);
+    const drops = Math.floor(sec * 62);
     for (let k = 0; k < drops; k++) {
       const at = Math.floor(Math.random() * n);
-      const big = Math.random() < 0.07;
-      const f = big ? rnd(450, 1000) : rnd(1800, 6500);
-      const q = big ? rnd(3, 6) : rnd(1.5, 4);
-      const tau = big ? rnd(0.012, 0.028) : rnd(0.0012, 0.0045);
+      const big = Math.random() < 0.08;
+      const f = big ? rnd(450, 1000) : rnd(1400, 4800);
+      const q = big ? rnd(3, 6) : rnd(1.2, 3);
+      const tau = big ? rnd(0.012, 0.028) : rnd(0.0016, 0.005);
       const amp = big ? rnd(0.05, 0.12) : Math.pow(Math.random(), 2.4) * 0.3;
       const pan = Math.random();
       const len = Math.floor(tau * 7 * sr);
